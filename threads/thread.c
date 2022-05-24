@@ -28,6 +28,10 @@
    that are ready to run but not actually running. */
 static struct list ready_list;
 
+/* List of processes in THREAD_BLOCKED state, that is, processes
+   that are bloked and sleeping now */
+// static struct list sleep_list; // 변경사항
+
 /* Idle thread. */
 static struct thread *idle_thread;
 
@@ -44,6 +48,7 @@ static struct list destruction_req;
 static long long idle_ticks;    /* # of timer ticks spent idle. */
 static long long kernel_ticks;  /* # of timer ticks in kernel threads. */
 static long long user_ticks;    /* # of timer ticks in user programs. */
+// static int64_t next_tick_to_wakeup; /* 변경사항 */
 
 /* Scheduling. */
 #define TIME_SLICE 4            /* # of timer ticks to give each thread. */
@@ -109,6 +114,7 @@ thread_init (void) {
 	lock_init (&tid_lock);
 	list_init (&ready_list);
 	list_init (&destruction_req);
+	// list_init (&sleep_list); // 변경사항
 
 	/* Set up a thread structure for the running thread. */
 	initial_thread = running_thread ();
@@ -307,6 +313,52 @@ thread_yield (void) {
 	do_schedule (THREAD_READY);
 	intr_set_level (old_level);
 }
+
+// /* 변경사항 */
+// void
+// thread_sleep (int64_t ticks) {
+// 	struct thread *curr;
+// 	enum intr_level old_level;
+
+// 	// ASSERT (!intr_context ());
+
+// 	old_level = intr_disable ();
+// 	curr = thread_current();
+// 	ASSERT(curr != idle_thread);
+// 	// if (curr != idle_thread)
+// 	curr->wakeup_tick = ticks;
+// 	list_push_back (&ready_list, &curr->elem);
+// 	// do_schedule (THREAD_READY);
+// 	thread_block();
+// 	intr_set_level (old_level);
+// }
+
+// /* 변경사항 */
+// void 
+// thread_awake(int64_t ticks){
+// 	struct list_elem *e = list_begin(&sleep_list);
+// 	while (e != list_end(&sleep_list)){
+// 		struct thread * now = list_entry(e, struct thread, elem);
+// 		if (now->wakeup_tick <= ticks){
+// 			e = list_remove(e); // list_remove 함수가 remove 후에 list_next 역할도 해줌
+// 			thread_unblock(now);
+// 		}
+// 		else
+// 			e = list_next(e);
+// 	}
+// }
+
+// /* 변경사항 */
+// void
+// update_next_tick_to_wakeup(int64_t ticks){
+// 	next_tick_to_wakeup = ticks;
+// }
+
+// /* 변경사항 */
+// int64_t 
+// get_next_tick_to_wakeup(void){
+// 	return next_tick_to_wakeup;
+// }
 
 /* Sets the current thread's priority to NEW_PRIORITY. */
 void
