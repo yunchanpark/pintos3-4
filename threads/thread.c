@@ -30,7 +30,8 @@ static struct list ready_list;
 
 /* List of processes in THREAD_BLOCKED state, that is, processes
    that are bloked and sleeping now */
-// static struct list sleep_list; // 변경사항
+static struct list sleep_list; // alarm-multiple 관련 변경
+static int64_t next_tick_to_awake; /* alarm-multiple 관련 변경 */
 
 /* Idle thread. */
 static struct thread *idle_thread;
@@ -48,7 +49,6 @@ static struct list destruction_req;
 static long long idle_ticks;    /* # of timer ticks spent idle. */
 static long long kernel_ticks;  /* # of timer ticks in kernel threads. */
 static long long user_ticks;    /* # of timer ticks in user programs. */
-// static int64_t next_tick_to_wakeup; /* 변경사항 */
 
 /* Scheduling. */
 #define TIME_SLICE 4            /* # of timer ticks to give each thread. */
@@ -114,7 +114,8 @@ thread_init (void) {
 	lock_init (&tid_lock);
 	list_init (&ready_list);
 	list_init (&destruction_req);
-	// list_init (&sleep_list); // 변경사항
+	list_init (&sleep_list); // alarm-multiple 관련 변경 // initialize sleep_list
+	next_tick_to_awake = INT64_MAX; // alarm-multiple 관련 변경
 
 	/* Set up a thread structure for the running thread. */
 	initial_thread = running_thread ();
@@ -314,51 +315,52 @@ thread_yield (void) {
 	intr_set_level (old_level);
 }
 
-// /* 변경사항 */
-// void
-// thread_sleep (int64_t ticks) {
-// 	struct thread *curr;
-// 	enum intr_level old_level;
+/* alarm-multiple 관련 변경 */
+void
+thread_sleep (int64_t ticks) {
+	struct thread *curr = thread_current();
+	enum intr_level old_level;
+	ASSERT (!intr_context ());
+	old_level = intr_disable ();
 
-// 	// ASSERT (!intr_context ());
+	ASSERT(curr != idle_thread); // check that current thread is not IDLE thread
+	// if (curr != idle_thread)
+	curr->wakeup_tick = ticks; // set current thread's local tick = ticks
+	update_next_tick_to_awake(ticks); // update next thread to be awakened which has minimal ticks (update_next_tick_to_awake)
 
-// 	old_level = intr_disable ();
-// 	curr = thread_current();
-// 	ASSERT(curr != idle_thread);
-// 	// if (curr != idle_thread)
-// 	curr->wakeup_tick = ticks;
-// 	list_push_back (&ready_list, &curr->elem);
-// 	// do_schedule (THREAD_READY);
-// 	thread_block();
-// 	intr_set_level (old_level);
-// }
+	list_push_back (&sleep_list, &curr->elem); // insert into sleep list
+	thread_block(); // change state to BLOCKED
+	intr_set_level (old_level);
+}
 
-// /* 변경사항 */
-// void 
-// thread_awake(int64_t ticks){
-// 	struct list_elem *e = list_begin(&sleep_list);
-// 	while (e != list_end(&sleep_list)){
-// 		struct thread * now = list_entry(e, struct thread, elem);
-// 		if (now->wakeup_tick <= ticks){
-// 			e = list_remove(e); // list_remove 함수가 remove 후에 list_next 역할도 해줌
-// 			thread_unblock(now);
-// 		}
-// 		else
-// 			e = list_next(e);
-// 	}
-// }
+/* alarm-multiple 관련 변경 */
+void 
+thread_awake(int64_t ticks){
+	struct list_elem *e = list_begin(&sleep_list); /* begin?front? */
+	while (e != list_end(&sleep_list)){
+		struct thread * t = list_entry(e, struct thread, elem);
+		if (t->wakeup_tick <= ticks){
+			e = list_remove(&t->elem); // list_remove 함수가 remove 후에 list_next 역할도 해줌
+			thread_unblock(t); // wakeup (awake) !
+		}
+		else{
+			e = list_next(e);
+			update_next_tick_to_awake(t->wakeup_tick); // update : who's the first thread to be awaken in the sleep list?
+		}
+	}
+}
 
-// /* 변경사항 */
-// void
-// update_next_tick_to_wakeup(int64_t ticks){
-// 	next_tick_to_wakeup = ticks;
-// }
+/* alarm-multiple 관련 변경 */
+void
+update_next_tick_to_awake(int64_t ticks){
+	next_tick_to_awake = (next_tick_to_awake > ticks) ? ticks : next_tick_to_awake;
+}
 
-// /* 변경사항 */
-// int64_t 
-// get_next_tick_to_wakeup(void){
-// 	return next_tick_to_wakeup;
-// }
+/* alarm-multiple 관련 변경 */
+int64_t 
+get_next_tick_to_awake(void){
+	return next_tick_to_awake;
+}
 
 /* Sets the current thread's priority to NEW_PRIORITY. */
 void
