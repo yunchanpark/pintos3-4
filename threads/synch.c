@@ -57,6 +57,7 @@ sema_init (struct semaphore *sema, unsigned value) {
    interrupts disabled, but if it sleeps then the next scheduled
    thread will probably turn interrupts back on. This is
    sema_down function. */
+/* priority-sema,condvar 관련 변경 */
 void
 sema_down (struct semaphore *sema) {
 	enum intr_level old_level;
@@ -66,7 +67,8 @@ sema_down (struct semaphore *sema) {
 
 	old_level = intr_disable ();
 	while (sema->value == 0) {
-		list_push_back (&sema->waiters, &thread_current ()->elem);
+		// list_push_back (&sema->waiters, &thread_current ()->elem);
+		list_insert_ordered(&sema->waiters, &thread_current()->elem, cmp_priority, NULL); // priority-sema,condvar 관련 변경 // instead Round-Robin scheduling, insert into waiters list based on priority.
 		thread_block ();
 	}
 	sema->value--;
@@ -102,6 +104,7 @@ sema_try_down (struct semaphore *sema) {
    and wakes up one thread of those waiting for SEMA, if any.
 
    This function may be called from an interrupt handler. */
+/* priority-sema,condvar 관련 변경 */
 void
 sema_up (struct semaphore *sema) {
 	enum intr_level old_level;
@@ -109,10 +112,12 @@ sema_up (struct semaphore *sema) {
 	ASSERT (sema != NULL);
 
 	old_level = intr_disable ();
-	if (!list_empty (&sema->waiters))
-		thread_unblock (list_entry (list_pop_front (&sema->waiters),
-					struct thread, elem));
+	if (!list_empty (&sema->waiters)){
+		list_sort (&sema->waiters, cmp_priority, NULL); //priority-sema,condvar 관련 변경 // there might be some priority changes while waiting for the sema, therefore sort the waiters list again
+		thread_unblock (list_entry (list_pop_front (&sema->waiters), struct thread, elem));
+	}
 	sema->value++;
+	test_max_priority(); // priority-sema,condvar 관련 변경 // there's a new UNBLOCKED thread, so let's check if the current thread is still the thread with highest priority. if not, yield ! 
 	intr_set_level (old_level);
 }
 
@@ -272,6 +277,7 @@ cond_init (struct condition *cond) {
    interrupt handler.  This function may be called with
    interrupts disabled, but interrupts will be turned back on if
    we need to sleep. */
+/* priority-sema,condvar 관련 변경 */
 void
 cond_wait (struct condition *cond, struct lock *lock) {
 	struct semaphore_elem waiter;
@@ -282,7 +288,8 @@ cond_wait (struct condition *cond, struct lock *lock) {
 	ASSERT (lock_held_by_current_thread (lock));
 
 	sema_init (&waiter.semaphore, 0);
-	list_push_back (&cond->waiters, &waiter.elem);
+	// list_push_back (&cond->waiters, &waiter.elem);
+	list_insert_ordered (&cond->waiters, &waiter.elem, cmp_sem_priority, NULL); // priority-sema,condvar 관련 변경 // instead Round-Robin scheduling, insert into waiters list based on priority.
 	lock_release (lock);
 	sema_down (&waiter.semaphore);
 	lock_acquire (lock);
@@ -295,6 +302,7 @@ cond_wait (struct condition *cond, struct lock *lock) {
    An interrupt handler cannot acquire a lock, so it does not
    make sense to try to signal a condition variable within an
    interrupt handler. */
+/* priority-sema,condvar 관련 변경 */
 void
 cond_signal (struct condition *cond, struct lock *lock UNUSED) {
 	ASSERT (cond != NULL);
@@ -302,9 +310,10 @@ cond_signal (struct condition *cond, struct lock *lock UNUSED) {
 	ASSERT (!intr_context ());
 	ASSERT (lock_held_by_current_thread (lock));
 
-	if (!list_empty (&cond->waiters))
-		sema_up (&list_entry (list_pop_front (&cond->waiters),
-					struct semaphore_elem, elem)->semaphore);
+	if (!list_empty (&cond->waiters)){
+		list_sort (&cond->waiters, cmp_sem_priority, NULL); // priority-sema,condvar 관련 변경 (추가사항) // there might be some priority changes while waiting for the condvar, therefore sort the waiters list again 
+		sema_up (&list_entry (list_pop_front (&cond->waiters), struct semaphore_elem, elem)->semaphore);
+	}
 }
 
 /* Wakes up all threads, if any, waiting on COND (protected by
@@ -320,4 +329,19 @@ cond_broadcast (struct condition *cond, struct lock *lock) {
 
 	while (!list_empty (&cond->waiters))
 		cond_signal (cond, lock);
+}
+
+/* priority-sema,condvar 관련 변경 */
+/* Sort the condvar's waiters list which is the list of semaphores waiting for the condvar, based on the priority of thread (the first one in the semaphore's waiters list) */
+bool cmp_sem_priority (const struct list_elem *a, const struct list_elem *b, void *aux){
+	struct semaphore_elem *sema_a = list_entry(a, struct semaphore_elem, elem);
+	struct semaphore_elem *sema_b = list_entry(b, struct semaphore_elem, elem);
+	struct list *sema_a_waiters = &(sema_a->semaphore.waiters);
+	struct list *sema_b_waiters = &(sema_b->semaphore.waiters);
+	struct thread *sema_a_waiters_front = list_entry(list_begin(sema_a_waiters), struct thread, elem);
+	struct thread *sema_b_waiters_front = list_entry(list_begin(sema_b_waiters), struct thread, elem);
+	if (sema_a_waiters_front->priority > sema_b_waiters_front->priority)
+		return true;
+	else
+		return false;
 }
