@@ -183,6 +183,7 @@ thread_print_stats (void) {
    The code provided sets the new thread's `priority' member to
    PRIORITY, but no actual priority scheduling is implemented.
    Priority scheduling is the goal of Problem 1-3. */
+/* alarm-priority, priority-fifo/preempt 관련 변경 */
 tid_t
 thread_create (const char *name, int priority,
 		thread_func *function, void *aux) {
@@ -213,6 +214,9 @@ thread_create (const char *name, int priority,
 
 	/* Add to run queue. */
 	thread_unblock (t);
+	test_max_priority(); // alarm-priority, priority-fifo/preempt 관련 변경 
+	// after the unblocked thread added to ready list, check if current thread is still the thread with highest priority. 
+	// (check if new inserted thread has higher priority than current one)
 
 	return tid;
 }
@@ -239,6 +243,7 @@ thread_block (void) {
    be important: if the caller had disabled interrupts itself,
    it may expect that it can atomically unblock a thread and
    update other data. */
+/* alarm-priority, priority-fifo/preempt 관련 변경 */
 void
 thread_unblock (struct thread *t) {
 	enum intr_level old_level;
@@ -247,7 +252,8 @@ thread_unblock (struct thread *t) {
 
 	old_level = intr_disable ();
 	ASSERT (t->status == THREAD_BLOCKED);
-	list_push_back (&ready_list, &t->elem);
+	// list_push_back (&ready_list, &t->elem);
+	list_insert_ordered(&ready_list, &t->elem, cmp_priority, NULL); // alarm-priority, priority-fifo/preempt 관련 변경 // instead Round-Robin scheduling, insert into ready_list base on priority.
 	t->status = THREAD_READY;
 	intr_set_level (old_level);
 }
@@ -301,6 +307,7 @@ thread_exit (void) {
 
 /* Yields the CPU.  The current thread is not put to sleep and
    may be scheduled again immediately at the scheduler's whim. */
+/* alarm-priority, priority-fifo/preempt 관련 변경 */
 void
 thread_yield (void) {
 	struct thread *curr = thread_current ();
@@ -310,7 +317,8 @@ thread_yield (void) {
 
 	old_level = intr_disable ();
 	if (curr != idle_thread)
-		list_push_back (&ready_list, &curr->elem);
+		list_insert_ordered(&ready_list, &curr->elem, cmp_priority, NULL); // alarm-priority, priority-fifo/preempt 관련 변경 // instead Round-Robin scheduling, insert into ready_list base on priority.
+	// list_push_back (&ready_list, &curr->elem);
 	do_schedule (THREAD_READY);
 	intr_set_level (old_level);
 }
@@ -323,12 +331,12 @@ thread_sleep (int64_t ticks) {
 	ASSERT (!intr_context ());
 	old_level = intr_disable ();
 
-	ASSERT(curr != idle_thread); // check that current thread is not IDLE thread
-	// if (curr != idle_thread)
+	// ASSERT(curr != idle_thread); // check that current thread is not IDLE thread
+	if (curr != idle_thread){
 	curr->wakeup_tick = ticks; // set current thread's local tick = ticks
 	update_next_tick_to_awake(ticks); // update next thread to be awakened which has minimal ticks (update_next_tick_to_awake)
-
 	list_push_back (&sleep_list, &curr->elem); // insert into sleep list
+	}
 	thread_block(); // change state to BLOCKED
 	intr_set_level (old_level);
 }
@@ -363,9 +371,12 @@ get_next_tick_to_awake(void){
 }
 
 /* Sets the current thread's priority to NEW_PRIORITY. */
+/* alarm-priority, priority-fifo/preempt 관련 변경 */
 void
 thread_set_priority (int new_priority) {
+	// ready_list 가 비어있지 않은지 확인
 	thread_current ()->priority = new_priority;
+	test_max_priority(); // alarm-priority, priority-fifo/preempt 관련 변경 // check if current thread is still thread with the highest priority anymore. if not, yield ! 
 }
 
 /* Returns the current thread's priority. */
@@ -399,6 +410,23 @@ int
 thread_get_recent_cpu (void) {
 	/* TODO: Your implementation goes here */
 	return 0;
+}
+
+/* alarm-priority, priority-fifo/preempt 관련 변경 */
+void test_max_priority(void){
+	if (!list_empty(&ready_list) && thread_current()->priority < list_entry(list_front(&ready_list), struct thread, elem)->priority)
+		thread_yield(); // alarm-priority, priority-fifo/preempt 관련 변경 // checking list_empty is necessary (if not, list_front: ASSERT (!list_empty (list)); FAILS and return debug-panic)
+}
+
+/* alarm-priority, priority-fifo/preempt 관련 변경 */
+/* compare priority of two threads. check if a has higher priority than b.  */
+bool cmp_priority(const struct list_elem *a, const struct list_elem *b, void *aux UNUSED){
+	struct thread * t_a = list_entry(a, struct thread, elem);
+	struct thread * t_b = list_entry(b, struct thread, elem);
+	if (t_a->priority > t_b->priority)
+		return true; // return true, and at the called spot, a will be inserted into the list, right in front of b. list(- - - - (insert a here) b - - ) 
+	else
+		return false;
 }
 
 /* Idle thread.  Executes when no other thread is ready to run.
