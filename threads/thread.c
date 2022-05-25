@@ -24,6 +24,9 @@
    Do not modify this value. */
 #define THREAD_BASIC 0xd42df210
 
+/* Set reasonable depth limit (max level 8) */
+#define MAXDEPTH 8
+
 /* List of processes in THREAD_READY state, that is, processes
    that are ready to run but not actually running. */
 static struct list ready_list;
@@ -115,7 +118,7 @@ thread_init (void) {
 	list_init (&ready_list);
 	list_init (&destruction_req);
 	list_init (&sleep_list); // alarm-multiple 관련 변경 // initialize sleep_list
-	next_tick_to_awake = INT64_MAX; // alarm-multiple 관련 변경
+	next_tick_to_awake = INT64_MAX; // alarm-multiple 관련 변경 // initialize next_tick_to_awake
 
 	/* Set up a thread structure for the running thread. */
 	initial_thread = running_thread ();
@@ -214,9 +217,11 @@ thread_create (const char *name, int priority,
 
 	/* Add to run queue. */
 	thread_unblock (t);
-	test_max_priority(); // alarm-priority, priority-fifo/preempt 관련 변경 
-	// after the unblocked thread added to ready list, check if current thread is still the thread with highest priority. 
-	// (check if new inserted thread has higher priority than current one)
+
+	/* after the unblocked thread added to ready list, check if current thread is still the thread with highest priority. 
+	   (check if new inserted thread has higher priority than current one) */
+	check_curr_max_priority(); // alarm-priority, priority-fifo/preempt 관련 변경 
+	
 
 	return tid;
 }
@@ -324,6 +329,7 @@ thread_yield (void) {
 }
 
 /* alarm-multiple 관련 변경 */
+/* block current thread, and insert it into sleep list */
 void
 thread_sleep (int64_t ticks) {
 	struct thread *curr = thread_current();
@@ -342,46 +348,58 @@ thread_sleep (int64_t ticks) {
 }
 
 /* alarm-multiple 관련 변경 */
+/* check every threads in the sleep list and wakeup if necessary */
 void 
 thread_awake(int64_t ticks){
-	struct list_elem *e = list_begin(&sleep_list); /* begin?front? */
+	struct list_elem *e = list_begin(&sleep_list); 
 	while (e != list_end(&sleep_list)){
 		struct thread * t = list_entry(e, struct thread, elem);
 		if (t->wakeup_tick <= ticks){
-			e = list_remove(&t->elem); // list_remove 함수가 remove 후에 list_next 역할도 해줌
+			e = list_remove(&t->elem);
 			thread_unblock(t); // wakeup (awake) !
 		}
 		else{
 			e = list_next(e);
-			update_next_tick_to_awake(t->wakeup_tick); // update : who's the first thread to be awaken in the sleep list?
+			update_next_tick_to_awake(t->wakeup_tick); // update next_tick_to_awake if needed
 		}
 	}
 }
 
 /* alarm-multiple 관련 변경 */
+/* update the next_tick_to_awake value if needed. 
+   parameter 'ticks' is the local tick(wakeup_tick field) of the new thread inserted into sleep list */
 void
 update_next_tick_to_awake(int64_t ticks){
 	next_tick_to_awake = (next_tick_to_awake > ticks) ? ticks : next_tick_to_awake;
 }
 
 /* alarm-multiple 관련 변경 */
+/* return the next_tick_to_awake value, in order to check which thread(in the sleep list) to awake next */
 int64_t 
 get_next_tick_to_awake(void){
 	return next_tick_to_awake;
 }
 
-/* Sets the current thread's priority to NEW_PRIORITY. */
 /* alarm-priority, priority-fifo/preempt 관련 변경 */
+/* priority-donate 관련 변경 */
+/* Sets the current thread's priority to NEW_PRIORITY. */
 void
 thread_set_priority (int new_priority) {
 	// ready_list 가 비어있지 않은지 확인
-	thread_current ()->priority = new_priority;
-	test_max_priority(); // alarm-priority, priority-fifo/preempt 관련 변경 // check if current thread is still thread with the highest priority anymore. if not, yield ! 
+	struct thread *curr = thread_current();
+	int curr_priority_before_refresh = curr->priority;
+	curr->priority = new_priority;
+	curr->init_priority = new_priority;
+	refresh_priority(); // priority-donate 관련 변경 // after apply new_priority, refresh current thread's priority
+	if (curr_priority_before_refresh != curr->priority)
+		donate_priority(); // priority-donate 관련 변경 // if the current thread's priority changed due to refresh function, adjust donation (by donate again with new priority). 
+	check_curr_max_priority(); // alarm-priority, priority-fifo/preempt 관련 변경 // check if current thread is still thread with the highest priority anymore. if not, yield ! 
 }
 
 /* Returns the current thread's priority. */
 int
 thread_get_priority (void) {
+	/* if there's any priority donated by other thread, return higher one */
 	return thread_current ()->priority;
 }
 
@@ -413,14 +431,17 @@ thread_get_recent_cpu (void) {
 }
 
 /* alarm-priority, priority-fifo/preempt 관련 변경 */
-void test_max_priority(void){
+/* check if current thread is still the highest priority thread. if not, yield. */
+void 
+check_curr_max_priority(void){
 	if (!list_empty(&ready_list) && thread_current()->priority < list_entry(list_front(&ready_list), struct thread, elem)->priority)
 		thread_yield(); // alarm-priority, priority-fifo/preempt 관련 변경 // checking list_empty is necessary (if not, list_front: ASSERT (!list_empty (list)); FAILS and return debug-panic)
 }
 
 /* alarm-priority, priority-fifo/preempt 관련 변경 */
 /* compare priority of two threads. check if a has higher priority than b.  */
-bool cmp_priority(const struct list_elem *a, const struct list_elem *b, void *aux UNUSED){
+bool 
+cmp_priority(const struct list_elem *a, const struct list_elem *b, void *aux UNUSED){
 	struct thread * t_a = list_entry(a, struct thread, elem);
 	struct thread * t_b = list_entry(b, struct thread, elem);
 	if (t_a->priority > t_b->priority)
@@ -428,6 +449,63 @@ bool cmp_priority(const struct list_elem *a, const struct list_elem *b, void *au
 	else
 		return false;
 }
+
+/* priority-donate 관련 변경 */
+/* inherit(donate) current thread's priority to the lock holder. (nested donation is limited by MAXDEPTH 8 )  */
+void 
+donate_priority(void){
+	struct thread *target_lock_caller = thread_current();
+	struct lock *target_lock = target_lock_caller->wait_on_lock;
+	int depth; /* impose a reasonable limit on depth of nested priority donation */
+
+	for (depth = 0; depth < MAXDEPTH; depth++){
+		if (!target_lock) // if caller is not waiting for a lock, end of the loop
+			return;
+		target_lock->holder->priority = target_lock_caller->priority; /* donation */ 
+		target_lock_caller = target_lock->holder; // update caller to check if further donation is needed
+		target_lock = target_lock_caller->wait_on_lock; // update target lock (the lock which new caller is waiting for)
+	}
+}
+
+/* priority-donate 관련 변경 */
+/* remove the donors who donated its priority in order to get the lock which is now released by current thread. */
+void 
+remove_donors_on_released_lock(struct lock *lock){
+	struct thread *curr = thread_current();
+	struct list_elem *e = list_begin(&curr->donations); // list_front is not working : assertion !list_empty(list) error. (the case when current thread got 0 donations)
+	while (e != list_end(&curr->donations)){
+		struct thread *t = list_entry(e, struct thread, donation_elem); // need to use donation_elem, instead of elem. (elem is for ready_list, sleep_list, destruction_req.)
+		if (t->wait_on_lock == lock)
+			e = list_remove(&t->donation_elem);
+		else
+			e = list_next(e);
+	}
+}
+
+/* priority-donate 관련 변경 */
+/* refresh current thread's priority, after release a lock */
+void refresh_priority(void){
+	struct thread *curr = thread_current();
+	curr->priority = curr->init_priority; // initialize to the init_priority (its own default priority)
+	if (list_empty(&curr->donations)) // if there isn't any donor, return (no need to check the highest donation priority)
+		return;
+	list_sort(&curr->donations, cmp_donation_priority, NULL); // sort the donations list based on donation priority
+	struct thread *p = list_entry(list_front(&curr->donations), struct thread, donation_elem); // thread with the higest priority from the donations
+	if (p->priority > curr->init_priority) // if the highest donation priority is higher than default priority (init_priority)
+		curr->priority = p->priority; // boost current thread's priority to degree of the highest donation priority
+}
+
+/* priority-donate 관련 변경 */
+/* compare donor's donation priority, in order to check who donated higher priority. 
+   if the priority of donor a is higher than donor b, return true  */
+bool cmp_donation_priority(const struct list_elem *a, const struct list_elem *b, void *aux UNUSED){
+	struct thread * t_a = list_entry(a, struct thread, donation_elem);
+	struct thread * t_b = list_entry(b, struct thread, donation_elem);
+	if (t_a->priority > t_b->priority)
+		return true;
+	else
+		return false;
+} 
 
 /* Idle thread.  Executes when no other thread is ready to run.
 
@@ -491,6 +569,11 @@ init_thread (struct thread *t, const char *name, int priority) {
 	t->tf.rsp = (uint64_t) t + PGSIZE - sizeof (void *);
 	t->priority = priority;
 	t->magic = THREAD_MAGIC;
+	/* priority-donate 관련 변경 */
+	/* initialize fields for priority donation */
+	t->init_priority = priority;
+	t->wait_on_lock = NULL;
+	list_init(&t->donations);
 }
 
 /* Chooses and returns the next thread to be scheduled.  Should

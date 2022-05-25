@@ -117,7 +117,7 @@ sema_up (struct semaphore *sema) {
 		thread_unblock (list_entry (list_pop_front (&sema->waiters), struct thread, elem));
 	}
 	sema->value++;
-	test_max_priority(); // priority-sema,condvar 관련 변경 // there's a new UNBLOCKED thread, so let's check if the current thread is still the thread with highest priority. if not, yield ! 
+	check_curr_max_priority(); // priority-sema,condvar 관련 변경 // there's a new UNBLOCKED thread, so let's check if the current thread is still the thread with highest priority. if not, yield ! 
 	intr_set_level (old_level);
 }
 
@@ -187,14 +187,22 @@ lock_init (struct lock *lock) {
    interrupt handler.  This function may be called with
    interrupts disabled, but interrupts will be turned back on if
    we need to sleep. */
+
+/* priority-donate 관련 변경 */
 void
 lock_acquire (struct lock *lock) {
+	struct thread *curr = thread_current();
 	ASSERT (lock != NULL);
 	ASSERT (!intr_context ());
-	ASSERT (!lock_held_by_current_thread (lock));
-
+	ASSERT (!lock_held_by_current_thread (lock)); // no recursive acquisition (cannot acquire lock while already holding the same lock)
+	if (lock->holder){ // if holder of the target lock exists, (already held by other thread)
+		curr->wait_on_lock = lock; // save the target lock's address on current holder's wait_on_lock field.
+		list_insert_ordered(&lock->holder->donations, &curr->donation_elem, cmp_donation_priority, NULL); // insert current thread's donation_elem into lock holder's donations list
+		donate_priority();
+	}
 	sema_down (&lock->semaphore);
-	lock->holder = thread_current ();
+	curr->wait_on_lock = NULL; // after acquired the lock, set NULL on wait_on_lock field
+	lock->holder = curr;
 }
 
 /* Tries to acquires LOCK and returns true if successful or false
@@ -210,8 +218,8 @@ lock_try_acquire (struct lock *lock) {
 	ASSERT (lock != NULL);
 	ASSERT (!lock_held_by_current_thread (lock));
 
-	success = sema_try_down (&lock->semaphore);
-	if (success)
+	success = sema_try_down (&lock->semaphore); // sucess = true(acquire successed) or false(acquire failed)
+	if (success) // if sucess = true
 		lock->holder = thread_current ();
 	return success;
 }
@@ -222,13 +230,17 @@ lock_try_acquire (struct lock *lock) {
    An interrupt handler cannot acquire a lock, so it does not
    make sense to try to release a lock within an interrupt
    handler. */
+
+/* priority-donate 관련 변경 */
 void
 lock_release (struct lock *lock) {
 	ASSERT (lock != NULL);
-	ASSERT (lock_held_by_current_thread (lock));
+	ASSERT (lock_held_by_current_thread (lock)); // check if current thread is the lock holder
 
-	lock->holder = NULL;
-	sema_up (&lock->semaphore);
+	lock->holder = NULL; // make lock's holder field NULL. time to release
+	remove_donors_on_released_lock(lock); // remove the donors on released lock from current thread's donations
+	refresh_priority(); // refresh current thread's priority
+	sema_up (&lock->semaphore); // allow other threads to acquire that lock, by sema up
 }
 
 /* Returns true if the current thread holds LOCK, false

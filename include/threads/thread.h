@@ -92,6 +92,10 @@ struct thread {
 	char name[16];                      /* Name (for debugging purposes). */
 	int priority;                       /* Priority. */
 	int64_t wakeup_tick;                /* Local ticks (minimum ticks required before awakened )  */ /* alarm-multiple 관련 변경 */
+	int init_priority;                  /* default priority (to initialize after return donated priority) */ // priority-donate 관련 변경
+	struct lock *wait_on_lock;          /* Address of lock that this thread is waiting for */ // priority-donate 관련 변경
+	struct list donations;              /* donors list (multiple donation) */ //priority-donate 관련 변경
+	struct list_elem donation_elem;     /* multiple donation case */ //priority-donate 관련 변경
 
 
 	/* Shared between thread.c and synch.c. */
@@ -152,7 +156,13 @@ void update_next_tick_to_awake(int64_t ticks);
 int64_t get_next_tick_to_awake(void);
 
 /* alarm-priority, priority-fifo/preempt 관련 변경 */
-void test_max_priority(void);
+void check_curr_max_priority(void);
 bool cmp_priority(const struct list_elem *a, const struct list_elem *b, void *aux UNUSED);
+
+/* priority-donate 관련 변경 */
+void donate_priority(void);
+void remove_donors_on_released_lock(struct lock *lock);
+void refresh_priority(void);
+bool cmp_donation_priority(const struct list_elem *a, const struct list_elem *b, void *aux);
 
 #endif /* threads/thread.h */
