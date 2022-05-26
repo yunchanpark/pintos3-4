@@ -195,10 +195,12 @@ lock_acquire (struct lock *lock) {
 	ASSERT (lock != NULL);
 	ASSERT (!intr_context ());
 	ASSERT (!lock_held_by_current_thread (lock)); // no recursive acquisition (cannot acquire lock while already holding the same lock)
-	if (lock->holder){ // if holder of the target lock exists, (already held by other thread)
-		curr->wait_on_lock = lock; // save the target lock's address on current holder's wait_on_lock field.
-		list_insert_ordered(&lock->holder->donations, &curr->donation_elem, cmp_donation_priority, NULL); // insert current thread's donation_elem into lock holder's donations list
-		donate_priority();
+	if(!thread_mlfqs){
+		if (lock->holder){ // if holder of the target lock exists, (already held by other thread)
+			curr->wait_on_lock = lock; // save the target lock's address on current holder's wait_on_lock field.
+			list_insert_ordered(&lock->holder->donations, &curr->donation_elem, cmp_donation_priority, NULL); // insert current thread's donation_elem into lock holder's donations list
+			donate_priority();
+		}
 	}
 	sema_down (&lock->semaphore);
 	curr->wait_on_lock = NULL; // after acquired the lock, set NULL on wait_on_lock field
@@ -236,10 +238,11 @@ void
 lock_release (struct lock *lock) {
 	ASSERT (lock != NULL);
 	ASSERT (lock_held_by_current_thread (lock)); // check if current thread is the lock holder
-
 	lock->holder = NULL; // make lock's holder field NULL. time to release
-	remove_donors_on_released_lock(lock); // remove the donors on released lock from current thread's donations
-	refresh_priority(); // refresh current thread's priority
+	if (!thread_mlfqs){
+		remove_donors_on_released_lock(lock); // remove the donors on released lock from current thread's donations
+		refresh_priority(); // refresh current thread's priority
+	}
 	sema_up (&lock->semaphore); // allow other threads to acquire that lock, by sema up
 }
 
