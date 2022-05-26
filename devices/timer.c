@@ -90,11 +90,15 @@ timer_elapsed (int64_t then) {
 /* Suspends execution for approximately TICKS timer ticks. */
 void
 timer_sleep (int64_t ticks) {
-	int64_t start = timer_ticks ();
+	int64_t start = timer_ticks (); // current time (in ticks : 1ms)
 
 	ASSERT (intr_get_level () == INTR_ON);
-	while (timer_elapsed (start) < ticks)
-		thread_yield ();
+	/* busy waiting */
+	// while (timer_elapsed (start) < ticks)
+	// 	thread_yield ();
+	/* sleep & awake */
+	// if (timer_elapsed(start) < ticks)
+	thread_sleep(start+ticks); // alarm-multiple 관련 변경 // current time + ticks(required) = time to be awaken => local ticks
 }
 
 /* Suspends execution for approximately MS milliseconds. */
@@ -126,6 +130,19 @@ static void
 timer_interrupt (struct intr_frame *args UNUSED) {
 	ticks++;
 	thread_tick ();
+	if (thread_mlfqs){
+		mlfqs_increment();
+		if (timer_ticks() % 4 == 0){
+			mlfqs_priority(thread_current());
+			if (timer_ticks() % TIMER_FREQ == 0){
+				mlfqs_load_avg();
+				mlfqs_recalc();
+			}
+		}
+	}
+	/* per every tick(1ms), check if there are any threads to be awaken */
+	if(get_next_tick_to_awake() <= ticks) // if the first candidate of sleep list needds to be awaken (== if there's at least 1 thread to be awaken)
+		thread_awake(ticks); // alarm-multiple 관련 변경 // by calling thread_awake(), check every threads in the sleep list and wakeup if necessary
 }
 
 /* Returns true if LOOPS iterations waits for more than one timer
