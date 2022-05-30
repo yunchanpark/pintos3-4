@@ -112,6 +112,43 @@ duplicate_pte (uint64_t *pte, void *va, void *aux) {
 }
 #endif
 
+// Project 2 (argument passing 관련 변경)
+void argument_stack(char **argv, int argc, struct intr_frame *if_){
+	char *arg_address[128];
+
+	// word-align 전까지
+	for(int i = argc-1 ; i>=0; i--){
+		int arg_i_len = strlen(argv[i]) + 1; // include sentinel(\0)
+		if_->rsp = if_->rsp - (arg_i_len); // 인자 크기만큼 스택을 늘려줌
+		memcpy(if_->rsp, argv[i], arg_i_len); // 늘려준 공간에 해당 인자를 복사
+		arg_address[i] = if_->rsp; // arg_address 에 위 인자를 복사해준 주소값을 저장
+	}
+
+	// word-align (8의 배수)
+	while(if_ -> rsp % 8 != 0){
+		if_->rsp--;
+		*(uint8_t *) if_->rsp = 0;
+	}
+
+	// word-align 이후 (깃북 argv[4]~argv[0]의 주소를 data로 넣기)
+	for(int i = argc; i>=0; i--){
+		if_->rsp = if_->rsp - 8;
+		if(i==argc)
+			memset(if_->rsp, 0, sizeof(char **));
+		else
+			memcpy(if_->rsp, &arg_address[i], sizeof(char **));
+	}
+
+	// rdi, rsi 세팅
+
+	if_->R.rdi = argc;
+	if_->R.rsi = if_->rsp; // 굳이 -8 하고나서 +8 안하고, 그냥 여기서 세팅하기
+
+	// 마지막줄 (fake address)
+	if_->rsp = if_->rsp - 8;
+	memset(if_->rsp, 0, sizeof(void *));
+}
+
 /* A thread function that copies parent's execution context.
  * Hint) parent->tf does not hold the userland context of the process.
  *       That is, you are required to pass second argument of process_fork to
@@ -161,9 +198,13 @@ error:
 /* Switch the current execution context to the f_name.
  * Returns -1 on fail. */
 int
-process_exec (void *f_name) {
+process_exec (void *f_name) { // 실험 
 	char *file_name = f_name;
 	bool success;
+
+	// Project 2 (argument passing 관련 변경)
+	char file_name_copy[128];
+	memcpy(file_name_copy, file_name, strlen(file_name)+1);
 
 	/* We cannot use the intr_frame in the thread structure.
 	 * This is because when current thread rescheduled,
@@ -176,13 +217,17 @@ process_exec (void *f_name) {
 	/* We first kill the current context */
 	process_cleanup ();
 
+	// memset(&_if, 0, sizeof _if); // Project 2 (argument passing 관련 변경) // 이거 삭제
+
 	/* And then load the binary */
-	success = load (file_name, &_if);
+	success = load (file_name_copy, &_if); // Project 2 (argument passing 관련 변경)
 
 	/* If load failed, quit. */
-	palloc_free_page (file_name);
+	palloc_free_page (file_name); 
 	if (!success)
 		return -1;
+
+	hex_dump(_if.rsp, _if.rsp, USER_STACK - _if.rsp, true); //Project 2 (argument passing 관련 변경) // KERN_BASE -> USER_STACK
 
 	/* Start switched process. */
 	do_iret (&_if);
@@ -204,6 +249,7 @@ process_wait (tid_t child_tid UNUSED) {
 	/* XXX: Hint) The pintos exit if process_wait (initd), we recommend you
 	 * XXX:       to add infinite loop here before
 	 * XXX:       implementing the process_wait. */
+	while (1){}
 	return -1;
 }
 
@@ -329,6 +375,20 @@ load (const char *file_name, struct intr_frame *if_) {
 	bool success = false;
 	int i;
 
+	// Project 2 (argument passing 관련 변경)
+	char *arg_list[128];
+	char *token, *save_ptr;
+	int token_count = 0;
+	
+	token = strtok_r(file_name, " ", &save_ptr);
+	arg_list[token_count] = token;
+
+	while(token!=NULL){
+		token = strtok_r(NULL, " ", &save_ptr);
+		token_count++;
+		arg_list[token_count] = token;
+	}
+
 	/* Allocate and activate page directory. */
 	t->pml4 = pml4_create ();
 	if (t->pml4 == NULL)
@@ -343,14 +403,14 @@ load (const char *file_name, struct intr_frame *if_) {
 	}
 
 	/* Read and verify executable header. */
-	if (file_read (file, &ehdr, sizeof ehdr) != sizeof ehdr
-			|| memcmp (ehdr.e_ident, "\177ELF\2\1\1", 7)
-			|| ehdr.e_type != 2
-			|| ehdr.e_machine != 0x3E // amd64
-			|| ehdr.e_version != 1
-			|| ehdr.e_phentsize != sizeof (struct Phdr)
-			|| ehdr.e_phnum > 1024) {
-		printf ("load: %s: error loading executable\n", file_name);
+	if (file_read (file, &ehdr, sizeof ehdr) != sizeof ehdr 
+			|| memcmp (ehdr.e_ident, "\177ELF\2\1\1", 7) // 7바이트 비교한거가 다르거나 
+			|| ehdr.e_type != 2 // 실행파일(type 2)이 아니거나
+			|| ehdr.e_machine != 0x3E // amd64가 아니거나
+			|| ehdr.e_version != 1 // object 파일 버전이 현재버전(1)이 아니거나
+			|| ehdr.e_phentsize != sizeof (struct Phdr) // 프로그램 해더 테이블의 한 엔트리 크기가, Phdr 구조체 사이즈와 다르거나
+			|| ehdr.e_phnum > 1024) { //  프로그램 헤더 테이블의 엔트리수가 1024보다 많거나
+		printf ("load: %s: error loading executable\n", file_name); // 위 중 하나라도 해당하면, error
 		goto done;
 	}
 
@@ -417,6 +477,8 @@ load (const char *file_name, struct intr_frame *if_) {
 	/* TODO: Your code goes here.
 	 * TODO: Implement argument passing (see project2/argument_passing.html). */
 
+	 // Project 2 (argument passing 관련 변경)
+	argument_stack(arg_list, token_count, if_);
 	success = true;
 
 done:
@@ -469,6 +531,8 @@ validate_segment (const struct Phdr *phdr, struct file *file) {
 	/* It's okay. */
 	return true;
 }
+
+
 
 #ifndef VM
 /* Codes of this block will be ONLY USED DURING project 2.

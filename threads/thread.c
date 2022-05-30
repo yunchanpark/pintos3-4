@@ -25,11 +25,13 @@
    Do not modify this value. */
 #define THREAD_BASIC 0xd42df210
 
-/* Set reasonable depth limit (max level 8) */
+/* Set reasonable depth limit, default for mlfqs (max level 8) */
+#define MAXDEPTH 8
+
+/* Set reasonable default for mlfqs */
 #define NICE_DEFAULT 0
 #define RECENT_CPU_DEFAULT 0
-#define LOAD_AVG_DEFAULT 0
-#define MAXDEPTH 8
+#define LOAD_AVG_DEFAULT 0 
 
 // /* Set default for nice, recent_cpu, and load_avg */
 // #define NICE_DEFAULT 0

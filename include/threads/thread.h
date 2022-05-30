@@ -93,15 +93,15 @@ struct thread {
 	int priority;                       /* Priority. */
 	/* Shared between thread.c and synch.c. */
 	struct list_elem elem;              /* List element. */
-	struct list_elem all_elem;          /* List element for all_list */ // 변경사항
+	struct list_elem all_elem;          /* List element for all_list */ // mlfqs 관련 변경
 
 	
 	int init_priority;                  /* default priority (to initialize after return donated priority) */ // priority-donate 관련 변경
 	struct lock *wait_on_lock;          /* Address of lock that this thread is waiting for */ // priority-donate 관련 변경
 	struct list donations;              /* donors list (multiple donation) */ //priority-donate 관련 변경
 	struct list_elem donation_elem;     /* multiple donation case */ //priority-donate 관련 변경
-	int nice;                           /* nice value of thread */// 변경사항
-	int recent_cpu;                     /* recent_cpu which estimates how much CPU time earned recently */// 변경사항
+	int nice;                           /* nice value of thread */// mlfqs 관련 변경
+	int recent_cpu;                     /* recent_cpu which estimates how much CPU time earned recently */// mlfqs 관련 변경
 
 #ifdef USERPROG
 	/* Owned by userprog/process.c. */
@@ -168,7 +168,7 @@ void remove_donors_on_released_lock(struct lock *lock);
 void refresh_priority(void);
 bool cmp_donation_priority(const struct list_elem *a, const struct list_elem *b, void *aux);
 
-/* 변경사항 */
+/* mlfqs 관련 변경 */
 void mlfqs_priority (struct thread *t); 
 void mlfqs_recent_cpu (struct thread *t); 
 void mlfqs_load_avg (void);
