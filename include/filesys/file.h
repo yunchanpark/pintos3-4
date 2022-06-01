@@ -1,9 +1,11 @@
 #ifndef FILESYS_FILE_H
 #define FILESYS_FILE_H
-
+#include <stdbool.h>
 #include "filesys/off_t.h"
 
 struct inode;
+
+/* struct file 구조체 옮겨오기 ? */
 
 /* Opening and closing files. */
 struct file *file_open (struct inode *);

@@ -12,6 +12,7 @@
 #include "threads/vaddr.h"
 #include "intrinsic.h"
 #include "threads/fixed_point.h" // mlfqs 관련 변경
+// #include "lib/stdio.h"
 #ifdef USERPROG
 #include "userprog/process.h"
 #endif
@@ -151,10 +152,10 @@ thread_start (void) {
 	struct semaphore idle_started;
 	sema_init (&idle_started, 0);
 	thread_create ("idle", PRI_MIN, idle, &idle_started);
-	load_avg = LOAD_AVG_DEFAULT; // mlfqs 관련 변경
-
+	
 	/* Start preemptive thread scheduling. */
 	intr_enable ();
+	load_avg = LOAD_AVG_DEFAULT; // mlfqs 관련 변경
 
 	/* Wait for the idle thread to initialize idle_thread. */
 	sema_down (&idle_started);
@@ -221,6 +222,22 @@ thread_create (const char *name, int priority,
 	init_thread (t, name, priority);
 	tid = t->tid = allocate_tid ();
 
+	/* Project 2 : system call 관련 추가 */
+	/* add new thread 't' into current thread's child_list */
+	struct thread *curr = thread_current();
+	list_push_back(&curr->child_list, &t->child_elem);
+	// File Descriptor Table 메모리 할당 // palloc이나 malloc?
+	t->fd_table = palloc_get_multiple(PAL_ZERO, FDT_PAGES);
+	if(t->fd_table == NULL)
+		return TID_ERROR;
+	t->fd_idx = 2; // 0 : stdin, 1: stdout
+
+	// /* Extra */
+	t->fd_table[0] = 1; // dummy value? 
+	t->fd_table[1] = 2; // dummy value?
+	// t->stdin_count = 1;
+	// t->stdout_count = 1;
+
 	/* Call the kernel_thread if it scheduled.
 	 * Note) rdi is 1st argument, and rsi is 2nd argument. */
 	t->tf.rip = (uintptr_t) kernel_thread;
@@ -238,7 +255,6 @@ thread_create (const char *name, int priority,
 	/* after the unblocked thread added to ready list, check if current thread is still the thread with highest priority. 
 	   (check if new inserted thread has higher priority than current one) */
 	check_curr_max_priority(); // alarm-priority, priority-fifo/preempt 관련 변경 
-	
 
 	return tid;
 }
@@ -274,7 +290,6 @@ thread_unblock (struct thread *t) {
 
 	old_level = intr_disable ();
 	ASSERT (t->status == THREAD_BLOCKED);
-	// list_push_back (&ready_list, &t->elem);
 	list_insert_ordered(&ready_list, &t->elem, cmp_priority, NULL); // alarm-priority, priority-fifo/preempt 관련 변경 // instead Round-Robin scheduling, insert into ready_list base on priority.
 	t->status = THREAD_READY;
 	intr_set_level (old_level);
@@ -340,7 +355,6 @@ thread_yield (void) {
 	old_level = intr_disable ();
 	if (curr != idle_thread)
 		list_insert_ordered(&ready_list, &curr->elem, cmp_priority, NULL); // alarm-priority, priority-fifo/preempt 관련 변경 // instead Round-Robin scheduling, insert into ready_list base on priority.
-	// list_push_back (&ready_list, &curr->elem);
 	do_schedule (THREAD_READY);
 	intr_set_level (old_level);
 }
@@ -349,11 +363,10 @@ thread_yield (void) {
 /* block current thread, and insert it into sleep list */
 void
 thread_sleep (int64_t ticks) {
-	struct thread *curr = thread_current();
 	enum intr_level old_level;
-	ASSERT (!intr_context ());
 	old_level = intr_disable ();
-
+	struct thread *curr = thread_current();
+	// ASSERT (!intr_context ());
 	ASSERT(curr != idle_thread); // check that current thread is not IDLE thread
 	
 	curr->wakeup_tick = ticks; // set current thread's local tick = ticks
@@ -415,7 +428,10 @@ thread_set_priority (int new_priority) {
 /* Returns the current thread's priority. */
 int
 thread_get_priority (void) {
-	return thread_current ()->priority;
+	enum intr_level old_level = intr_disable();
+	int ret = thread_current ()->priority;
+	intr_set_level(old_level);
+	return ret;
 }
 
 /* alarm-priority, priority-fifo/preempt 관련 변경 */
@@ -673,9 +689,17 @@ init_thread (struct thread *t, const char *name, int priority) {
 	/* mlfqs 관련 변경 */
 	t->nice = NICE_DEFAULT;
 	t->recent_cpu = RECENT_CPU_DEFAULT;
+
+	list_init(&t->child_list);
+	sema_init(&t->wait_sema,0);
+	sema_init(&t->fork_sema,0);
+	sema_init(&t->free_sema,0);
+
 	if(t!= idle_thread){
 		list_push_back (&all_list, &t->all_elem);
 	}
+	/* system call 관련 변경 */
+	// t->exit_status = 0;
 }
 
 /* Chooses and returns the next thread to be scheduled.  Should
