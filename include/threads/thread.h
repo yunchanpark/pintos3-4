@@ -138,7 +138,7 @@ struct thread {
     // int stdout_count;
 
     // /* 현재 실행 중인 파일 */
-    // struct file *running;
+    struct file *running;                 //denying writes to executable
 	
 };
 

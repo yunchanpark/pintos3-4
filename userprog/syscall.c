@@ -33,7 +33,7 @@ int _write (int fd UNUSED, const void *buffer, unsigned size);
 void seek(int fd, unsigned position);
 unsigned tell(int fd);
 void close(int fd);
-tid_t fork (const char *thread_name, struct intr_frame *f);
+tid_t fork (const char *thread_name);
 int exec (const char *file_name);
 
 /* syscall helper functions */
@@ -74,6 +74,46 @@ syscall_init (void) {
 	lock_init(&filesys_lock);
 }
 
+/* helper functions letsgo ! */
+void check_address(const uint64_t* addr){
+	struct thread *t = thread_current(); // 변경사항
+	/* 포인터가 가리키는 주소가 유저영역의 주소인지 확인 */
+	/* what if the user provides an invalid pointer, a pointer to kernel memory, 
+	 * or a block partially in one of those regions */
+	/* 잘못된 접근인 경우, 프로세스 종료 */
+	if (!is_user_vaddr(addr) || addr == NULL || pml4_get_page(t->pml4, addr) == NULL)
+		exit(-1);
+} 
+
+int process_add_file(struct file *f){
+	struct thread *curr = thread_current();
+	struct file **curr_fd_table = curr->fd_table;
+	for (int idx = curr->fd_idx; idx < FDCOUNT_LIMIT; idx++){
+		if(curr_fd_table[idx] == NULL){
+			curr_fd_table[idx] = f;
+			curr->fd_idx = idx; // fd의 최대값 + 1 // 논란있을듯???
+			return curr->fd_idx;
+		}
+	}
+	return -1;
+}
+
+struct file *process_get_file (int fd){
+	if (fd < 0 || fd >= FDCOUNT_LIMIT)
+		return NULL;
+	struct file *f = thread_current()->fd_table[fd];
+	return f;
+}
+
+/* revove the file(corresponding to fd) from the FDT of current process */
+void process_close_file(int fd){
+	if (fd < 0 || fd > FDCOUNT_LIMIT)
+		return NULL;
+	thread_current()->fd_table[fd] = NULL;
+}
+
+/* helper functions gooooooooooood job */
+
 /* The main system call interface */
 void
 syscall_handler (struct intr_frame *f UNUSED) {
@@ -86,8 +126,10 @@ syscall_handler (struct intr_frame *f UNUSED) {
 		case SYS_EXIT:                   /* Terminate this process. */
 			exit(f->R.rdi);
 			break;    
-		case SYS_FORK:                   /* Clone current process. */
-			f->R.rax = fork(f->R.rdi, f);
+		case SYS_FORK:   ;                /* Clone current process. */
+			struct thread *curr = thread_current();
+			memcpy(&curr->parent_if, f, sizeof(struct intr_frame));
+			f->R.rax = fork(f->R.rdi);
 			break;
 		case SYS_EXEC:                   /* Switch current process. */
 			if (exec(f->R.rdi) == -1)
@@ -147,9 +189,10 @@ void exit(int status){
 }
 
 /* Clone current process. */
-tid_t fork (const char *thread_name, struct intr_frame *f){
+tid_t fork (const char *thread_name){
 	/* create new process, which is the clone of current process with the name THREAD_NAME*/
-	return process_fork(thread_name, f);
+	struct thread *curr = thread_current();
+	return process_fork(thread_name, &curr->parent_if);
 	/* must return pid of the child process */
 }
 
@@ -209,23 +252,22 @@ int filesize (int fd){
 /* 수정완료 */
 int read (int fd, void *buffer, unsigned size){
 	check_address(buffer);
+	unsigned char *buf = buffer;
 	int readsize;
+
 	struct file *f = process_get_file(fd);
 
 	if (f == NULL) return -1;
+	if (fd < 0 || fd>= FDCOUNT_LIMIT) return NULL;
 	if (f == STDOUT) return -1;
 	
 	if (f == STDIN){
-		int i;
-		unsigned char *buf = buffer;
-
-		for (i=0; i<size; i++){
+		for (readsize = 0; readsize < size; readsize++){
 			char c = input_getc();
 			*buf++ = c;
 			if (c == '\0')
 				break;
 		}
-		readsize =  i;
 	}
 	else{
 		lock_acquire(&filesys_lock); // 파일에 동시접근 일어날 수 있으므로 lock 사용
@@ -238,12 +280,12 @@ int read (int fd, void *buffer, unsigned size){
 /* 수정완료 */
 int write (int fd, const void *buffer, unsigned size){ // length->size로 수정 (맞춰수정?)
 	check_address(buffer);
-	int writesize;
 	struct file *f = process_get_file(fd);
+	int writesize;
+
 	if (f == NULL) return -1;
 	if (f == STDIN) return -1;
-	
-	
+
 	if (f == STDOUT){
 		putbuf(buffer, size);// buffer에 들은 size만큼을, 한 번의 호출로 작성해준다.
 		writesize = size;
@@ -264,55 +306,20 @@ void seek (int fd, unsigned position){
 
 unsigned tell (int fd){
 	struct file *f = process_get_file(fd);
-	if (f > 2)
-		return file_tell(f);
+	if (fd < 2)
+		return;
+	return file_tell(f);
 }
 
 void close (int fd){
+	if(fd < 2) return;
 	struct file *f = process_get_file(fd);
+
 	if(f == NULL)
 		return;
 	/* 여긴 그냥 fd < 2로도 가능할듯 */
-	if(fd < 2 || f <= 2)
-		return;
 	process_close_file(fd);
 	file_close(f);
 }
 
 
-void check_address(const uint64_t* addr){
-	struct thread *t = thread_current(); // 변경사항
-	/* 포인터가 가리키는 주소가 유저영역의 주소인지 확인 */
-	/* what if the user provides an invalid pointer, a pointer to kernel memory, 
-	 * or a block partially in one of those regions */
-	/* 잘못된 접근인 경우, 프로세스 종료 */
-	if (!is_user_vaddr(addr) || addr == NULL || pml4_get_page(t->pml4, addr) == NULL)
-		exit(-1);
-} 
-
-int process_add_file(struct file *f){
-	struct thread *curr = thread_current();
-	struct file **curr_fd_table = curr->fd_table;
-	for (int idx = curr->fd_idx; idx < FDCOUNT_LIMIT; idx++){
-		if(curr_fd_table[idx] == NULL){
-			curr_fd_table[idx] = f;
-			curr->fd_idx = idx+1; // fd의 최대값 + 1
-			return curr->fd_idx;
-		}
-	}
-	return -1;
-}
-
-struct file *process_get_file (int fd){
-	if (fd < 0 || fd >= FDCOUNT_LIMIT)
-		return NULL;
-	struct file *f = thread_current()->fd_table[fd];
-	return f;
-}
-
-/* revove the file(corresponding to fd) from the FDT of current process */
-void process_close_file(int fd){
-	if (fd < 0 || fd > FDCOUNT_LIMIT)
-		return NULL;
-	thread_current()->fd_table[fd] = NULL;
-}
