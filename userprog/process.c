@@ -84,8 +84,7 @@ tid_t
 process_fork (const char *name, struct intr_frame *if_ UNUSED) {
 	/* Clone current thread to new thread.*/
 	struct thread *curr = thread_current();
-
-	memcpy(&curr->parent_if, if_, sizeof(struct intr_frame)); 
+	// memcpy(&curr->parent_if, if_, sizeof(struct intr_frame)); 
 
 	tid_t pid = thread_create (name, PRI_DEFAULT, __do_fork, curr); // 마지막에 thread_current를 줘서, 같은 rsi를 공유하게 함.
 	if (pid == TID_ERROR)
@@ -141,6 +140,12 @@ duplicate_pte (uint64_t *pte, void *va, void *aux) {
 }
 #endif
 
+struct dict_elem{
+	uintptr_t key;
+	uintptr_t value;
+};
+// dup_count 말고 map_idx가 더 lgtm
+
 /* A thread function that copies parent's execution context.
  * Hint) parent->tf does not hold the userland context of the process.
  *       That is, you are required to pass second argument of process_fork to
@@ -182,14 +187,41 @@ __do_fork (void *aux) {
 
 	if (parent->fd_idx == FDCOUNT_LIMIT)
 		goto error;
-	
-	current->fd_table[0] = parent->fd_table[0];
-	current->fd_table[1] = parent->fd_table[1];
 
-	for(int i = 2; i < FDCOUNT_LIMIT; i++){
+	const int DICTLEN = 10;
+	struct dict_elem dup_file_dict[10];
+	int dup_idx = 0;
+	
+	// current->fd_table[0] = parent->fd_table[0];
+	// current->fd_table[1] = parent->fd_table[1];
+
+	for(int i = 0; i < FDCOUNT_LIMIT; i++){
 		struct file *f = parent->fd_table[i];
 		if (f==NULL) continue;
-		current->fd_table[i] = file_duplicate(f);
+		bool is_exist = false;
+		for (int j = 0; j < DICTLEN; j++){
+			if (dup_file_dict[j].key == f){
+				current->fd_table[i] = dup_file_dict[j].value;
+				is_exist = true;
+				break;
+			}
+		}
+		if (is_exist)
+			continue;
+		
+		struct file *new_f;
+		if (f>2)
+			new_f = file_duplicate(f);
+		else
+			new_f = f;
+
+		current->fd_table[i] = new_f;
+
+		if(dup_idx<DICTLEN){
+			dup_file_dict[dup_idx].key = f;
+			dup_file_dict[dup_idx].value = new_f;
+			dup_idx ++;
+		}
 	}
 
 	current->fd_idx = parent->fd_idx;
@@ -335,7 +367,7 @@ process_exit (void) {
 	palloc_free_multiple(curr->fd_table, FDT_PAGES);
 
 	file_close(curr->running); // denying writes to executable
-	
+
 	process_cleanup ();
 
 	sema_up(&curr->wait_sema);
@@ -481,6 +513,7 @@ load (const char *file_name, struct intr_frame *if_) {
 	}
 
 	/* denying writes to executable */
+	/* 실행 중인 프로세스가 파일을 열었을 때는, write(덮어쓰기)가 발생하지 않도록 방지해주는 역할 */
 	t->running = file;
 	file_deny_write(file);
 
@@ -794,3 +827,4 @@ struct thread * get_child(int pid){
 	}
 	return NULL;
 }
+

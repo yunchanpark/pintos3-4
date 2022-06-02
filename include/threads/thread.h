@@ -134,8 +134,9 @@ struct thread {
 	struct file **fd_table;             /* File Descriptor Table (FD Table) */
 	int fd_idx;                          /* File Descriptor Index (FD Idx) */
 
-    // int stdin_count;
-    // int stdout_count;
+	/* project 2 extra */
+    int stdin_count;
+    int stdout_count;
 
     // /* 현재 실행 중인 파일 */
     struct file *running;                 //denying writes to executable

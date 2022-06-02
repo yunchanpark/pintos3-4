@@ -232,11 +232,11 @@ thread_create (const char *name, int priority,
 		return TID_ERROR;
 	t->fd_idx = 2; // 0 : stdin, 1: stdout
 
-	// /* Extra */
-	t->fd_table[0] = 1; // dummy value? 
-	t->fd_table[1] = 2; // dummy value?
-	// t->stdin_count = 1;
-	// t->stdout_count = 1;
+	// /* project 2 : Extra */
+	t->fd_table[0] = 1; // dummy value : 0이 아니라 1을 주는 이유: 0을 주면, fd_table[fd]==NULL 을 확인할 때 걸릴 수 있음
+	t->fd_table[1] = 2; // dummy value : 같은 맥락에서 여긴 2로 줌 
+	t->stdin_count = 1;
+	t->stdout_count = 1;
 
 	/* Call the kernel_thread if it scheduled.
 	 * Note) rdi is 1st argument, and rsi is 2nd argument. */
