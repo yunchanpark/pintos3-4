@@ -95,6 +95,7 @@ int process_add_file(struct file *f){
 			return curr->fd_idx;
 		}
 	}
+	curr->fd_idx = FDCOUNT_LIMIT; // 이게 1 FAIL 의 원인
 	return -1;
 }
 
