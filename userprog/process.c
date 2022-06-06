@@ -188,8 +188,8 @@ __do_fork (void *aux) {
 	if (parent->fd_idx == FDCOUNT_LIMIT)
 		goto error;
 
-	const int DICTLEN = 10;
-	struct dict_elem dup_file_dict[10];
+	const int DICTLEN = 100;
+	struct dict_elem dup_file_dict[100];
 	int dup_idx = 0;
 	
 	// current->fd_table[0] = parent->fd_table[0];
@@ -198,8 +198,9 @@ __do_fork (void *aux) {
 	for(int i = 0; i < FDCOUNT_LIMIT; i++){
 		struct file *f = parent->fd_table[i];
 		if (f==NULL) continue;
+		
 		bool is_exist = false;
-		for (int j = 0; j < DICTLEN; j++){
+		for (int j = 0; j <= dup_idx; j++){
 			if (dup_file_dict[j].key == f){
 				current->fd_table[i] = dup_file_dict[j].value;
 				is_exist = true;

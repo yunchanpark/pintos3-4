@@ -93,7 +93,7 @@ int process_add_file(struct file *f){
 	for (int idx = curr->fd_idx; idx < FDCOUNT_LIMIT; idx++){
 		if(curr_fd_table[idx] == NULL){
 			curr_fd_table[idx] = f;
-			curr->fd_idx = idx; // fd의 최대값 + 1 // 논란있을듯???
+			curr->fd_idx = idx; 
 			return curr->fd_idx;
 		}
 	}
@@ -109,6 +109,8 @@ struct file *process_get_file (int fd){
 }
 
 /* revove the file(corresponding to fd) from the FDT of current process */
+
+
 void process_close_file(int fd){
 	if (fd < 0 || fd > FDCOUNT_LIMIT)
 		return NULL;
@@ -202,6 +204,7 @@ tid_t fork (const char *thread_name){
 	/* must return pid of the child process */
 }
 
+/* Switch current process. */
 int exec (const char *file){
 	check_address(file);
 	int size = strlen(file) + 1;
@@ -265,7 +268,6 @@ int read (int fd, void *buffer, unsigned size){
 	struct file *f = process_get_file(fd);
 
 	if (f == NULL) return -1;
-	// if (fd < 0 || fd>= FDCOUNT_LIMIT) return NULL;
 	if (f == STDOUT) return -1;
 	
 	if (f == STDIN){
@@ -291,8 +293,10 @@ int read (int fd, void *buffer, unsigned size){
 	return readsize;
 }
 
+
+
 /* 수정완료 */
-int write (int fd, const void *buffer, unsigned size){ // length->size로 수정 (맞춰수정?)
+int write (int fd, const void *buffer, unsigned size){ 
 	check_address(buffer);
 	struct file *f = process_get_file(fd);
 	int writesize;
@@ -335,7 +339,7 @@ unsigned tell (int fd){
 }
 
 void close (int fd){
-	// if(fd < 2) return;
+	
 	struct file *f = process_get_file(fd);
 
 	if(f == NULL)
@@ -346,8 +350,9 @@ void close (int fd){
 		curr->stdin_count--;
 	else if(fd==1 || f==STDOUT)
 		curr->stdout_count--;
-	/* 여긴 그냥 fd < 2로도 가능할듯 */
+	
 	process_close_file(fd);
+
 	if(fd <= 1 || f <= 2){
 		return;
 	}
@@ -360,6 +365,7 @@ void close (int fd){
 	}
 }
 
+/* Project 2 : Extra 관련 변경 */
 int dup2(int oldfd, int newfd){
 	struct file *f = process_get_file(oldfd);
 	
