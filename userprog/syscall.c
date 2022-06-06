@@ -17,6 +17,7 @@
 #include "userprog/process.h"
 #include "threads/synch.h"
 
+
 void syscall_entry (void);
 void syscall_handler (struct intr_frame *);
 
@@ -35,6 +36,7 @@ unsigned tell(int fd);
 void close(int fd);
 tid_t fork (const char *thread_name);
 int exec (const char *file_name);
+int dup2(int oldfd, int newfd);
 
 /* syscall helper functions */
 void check_address(const uint64_t*);
@@ -91,7 +93,7 @@ int process_add_file(struct file *f){
 	for (int idx = curr->fd_idx; idx < FDCOUNT_LIMIT; idx++){
 		if(curr_fd_table[idx] == NULL){
 			curr_fd_table[idx] = f;
-			curr->fd_idx = idx; // fd의 최대값 + 1 // 논란있을듯???
+			curr->fd_idx = idx; 
 			return curr->fd_idx;
 		}
 	}
@@ -107,6 +109,8 @@ struct file *process_get_file (int fd){
 }
 
 /* revove the file(corresponding to fd) from the FDT of current process */
+
+
 void process_close_file(int fd){
 	if (fd < 0 || fd > FDCOUNT_LIMIT)
 		return NULL;
@@ -127,7 +131,7 @@ syscall_handler (struct intr_frame *f UNUSED) {
 		case SYS_EXIT:                   /* Terminate this process. */
 			exit(f->R.rdi);
 			break;    
-		case SYS_FORK:   ;                /* Clone current process. */
+		case SYS_FORK:  ;                 /* Clone current process. */
 			struct thread *curr = thread_current();
 			memcpy(&curr->parent_if, f, sizeof(struct intr_frame));
 			f->R.rax = fork(f->R.rdi);
@@ -166,6 +170,9 @@ syscall_handler (struct intr_frame *f UNUSED) {
 		case SYS_CLOSE:					 /* Close a file. */
 			close(f->R.rdi);
 			break;
+		case SYS_DUP2:
+			f->R.rax = dup2(f->R.rdi, f->R.rsi);
+			break;
 		default:						 /* call thread_exit() ? */
 			exit(-1);
 			break;
@@ -197,6 +204,7 @@ tid_t fork (const char *thread_name){
 	/* must return pid of the child process */
 }
 
+/* Switch current process. */
 int exec (const char *file){
 	check_address(file);
 	int size = strlen(file) + 1;
@@ -255,19 +263,26 @@ int read (int fd, void *buffer, unsigned size){
 	check_address(buffer);
 	unsigned char *buf = buffer;
 	int readsize;
+	struct thread *curr = thread_current();
 
 	struct file *f = process_get_file(fd);
 
 	if (f == NULL) return -1;
-	if (fd < 0 || fd>= FDCOUNT_LIMIT) return NULL;
 	if (f == STDOUT) return -1;
 	
 	if (f == STDIN){
-		for (readsize = 0; readsize < size; readsize++){
-			char c = input_getc();
-			*buf++ = c;
-			if (c == '\0')
-				break;
+		if(curr->stdin_count == 0){
+			NOT_REACHED();
+			process_close_file(fd);
+			readsize = -1;
+		}
+		else{
+			for (readsize = 0; readsize < size; readsize++){
+				char c = input_getc();
+				*buf++ = c;
+				if (c == '\0')
+					break;
+			}
 		}
 	}
 	else{
@@ -278,18 +293,29 @@ int read (int fd, void *buffer, unsigned size){
 	return readsize;
 }
 
+
+
 /* 수정완료 */
-int write (int fd, const void *buffer, unsigned size){ // length->size로 수정 (맞춰수정?)
+int write (int fd, const void *buffer, unsigned size){ 
 	check_address(buffer);
 	struct file *f = process_get_file(fd);
 	int writesize;
 
 	if (f == NULL) return -1;
+	struct thread *curr = thread_current();
+
 	if (f == STDIN) return -1;
 
 	if (f == STDOUT){
-		putbuf(buffer, size);// buffer에 들은 size만큼을, 한 번의 호출로 작성해준다.
-		writesize = size;
+		if(curr->stdout_count == 0){
+			NOT_REACHED();
+			process_close_file(fd);
+			writesize = -1;
+		}
+		else{
+			putbuf(buffer, size);// buffer에 들은 size만큼을, 한 번의 호출로 작성해준다.
+			writesize = size;
+		}
 	}
 	else{
 		lock_acquire(&filesys_lock); // 파일에 동시접근 일어날 수 있으므로 lock 사용
@@ -313,14 +339,54 @@ unsigned tell (int fd){
 }
 
 void close (int fd){
-	if(fd < 2) return;
+	
 	struct file *f = process_get_file(fd);
 
 	if(f == NULL)
 		return;
-	/* 여긴 그냥 fd < 2로도 가능할듯 */
+	struct thread *curr = thread_current();
+
+	if(fd==0 || f==STDIN)
+		curr->stdin_count--;
+	else if(fd==1 || f==STDOUT)
+		curr->stdout_count--;
+	
 	process_close_file(fd);
-	file_close(f);
+
+	if(fd <= 1 || f <= 2){
+		return;
+	}
+
+	if(f->dup_count == 0){
+		file_close(f);
+	}
+	else{
+		f->dup_count--;
+	}
 }
 
+/* Project 2 : Extra 관련 변경 */
+int dup2(int oldfd, int newfd){
+	struct file *f = process_get_file(oldfd);
+	
+	if(f==NULL) return -1;
 
+	if(oldfd == newfd) return newfd;
+
+	struct thread *curr = thread_current();
+	struct file **curr_fd_table = curr->fd_table;
+
+	if(f==STDIN){
+		curr->stdin_count ++;
+	}
+	else if(f==STDOUT){
+		curr->stdout_count ++;
+	}
+	else{
+		f->dup_count++;
+	}
+
+	close(newfd);
+	curr_fd_table[newfd] = f;
+	return newfd;
+}
