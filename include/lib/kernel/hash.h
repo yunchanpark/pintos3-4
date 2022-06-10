@@ -54,6 +54,16 @@ typedef bool hash_less_func (const struct hash_elem *a,
  * data AUX. */
 typedef void hash_action_func (struct hash_elem *e, void *aux);
 
+/*** team 7 : hash ***/
+/*
+ * 1. hash table을 만들면 bucket을 array로 생성함
+ * 2. hash func를 통해 key value를 만듦
+ * 3. find bucket을 통해 key value와 bucket cnt를 &연산해서 bucket[idx] return
+ * 4. return 받은 bucket[idx]로 insert하거나... find하거나.... 한다
+ * 5. insert하는 경우, bucket[idx]를 돌다가 찾으려는 값과 같으면 hash_elem return,
+ *    없으면 맨 뒤로 들고간 값을 추가한다. (있을 때 또 넣지 않도록, null일 때만 추가!)
+ */
+
 /* Hash table. */
 struct hash {
 	size_t elem_cnt;            /* Number of elements in table. */

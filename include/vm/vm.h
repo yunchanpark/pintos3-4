@@ -1,6 +1,7 @@
 #ifndef VM_VM_H
 #define VM_VM_H
 #include <stdbool.h>
+#include <hash.h>   /*** team 8 ***/
 #include "threads/palloc.h"
 
 enum vm_type {
@@ -40,12 +41,17 @@ struct thread;
  * This is kind of "parent class", which has four "child class"es, which are
  * uninit_page, file_page, anon_page, and page cache (project4).
  * DO NOT REMOVE/MODIFY PREDEFINED MEMBER OF THIS STRUCTURE. */
+
 struct page {
 	const struct page_operations *operations;
 	void *va;              /* Address in terms of user space */
 	struct frame *frame;   /* Back reference for frame */
 
 	/* Your implementation */
+    /*** team 7 ***/
+    struct hash_elem spt_elem;
+    bool activate; 
+    int64_t age;
 
 	/* Per-type data are binded into the union.
 	 * Each function automatically detects the current union */
@@ -84,7 +90,10 @@ struct page_operations {
 /* Representation of current process's memory space.
  * We don't want to force you to obey any specific design for this struct.
  * All designs up to you for this. */
+
+/*** team 7 ***/
 struct supplemental_page_table {
+    struct hash *spt_hash;
 };
 
 #include "threads/thread.h"

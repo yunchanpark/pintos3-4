@@ -18,6 +18,24 @@ vm_init (void) {
 	/* TODO: Your code goes here. */
 }
 
+/*** team 7 : for hash ***/
+/* Returns a hash value for page p. */
+unsigned
+page_hash (const struct hash_elem *p_, void *aux UNUSED) {
+    const struct page *p = hash_entry (p_, struct page, spt_elem);
+    return hash_bytes (&p->va, sizeof p->va);
+}
+
+/* Returns true if page a precedes page b. */
+bool
+page_less (const struct hash_elem *a_, const struct hash_elem *b_, void *aux UNUSED) {
+    const struct page *a = hash_entry (a_, struct page, spt_elem);
+    const struct page *b = hash_entry (b_, struct page, spt_elem);
+
+    return a->va < b->va;
+}
+
+
 /* Get the type of the page. This function is useful if you want to know the
  * type of the page after it will be initialized.
  * This function is fully implemented now. */
@@ -61,21 +79,44 @@ err:
 }
 
 /* Find VA from spt and return page. On error, return NULL. */
+/*** team : 7 ***/
 struct page *
 spt_find_page (struct supplemental_page_table *spt UNUSED, void *va UNUSED) {
-	struct page *page = NULL;
-	/* TODO: Fill this function. */
+	/*** debugging ddalgi : cases~ ***/
+    // struct page *page;
+    // struct hash_iterator spt_iter;
+    
+    // hash_first(&spt_iter, &spt->spt_hash);
 
-	return page;
+    // while(hash_next(&spt_iter)) {
+    //     page = hash_entry(hash_cur(&spt_iter), struct page, spt_elem);
+    //     if(page->va == va) {
+    //         return page;
+    //     }
+    // }
+	// return NULL;
+
+    struct page page; // fake page
+    page.va = va;
+
+    struct hash_elem *search = hash_find(spt->spt_hash, &page.spt_elem);
+    if(search != NULL) {
+        return hash_entry(search, struct page, spt_elem);
+    }
+
+    struct page *page = palloc_get_page(PAL_USER);
+
+    return NULL;
 }
 
 /* Insert PAGE into spt with validation. */
+/*** team 7 ***/
 bool
-spt_insert_page (struct supplemental_page_table *spt UNUSED,
-		struct page *page UNUSED) {
+spt_insert_page (struct supplemental_page_table *spt UNUSED, struct page *page UNUSED) {
 	int succ = false;
-	/* TODO: Fill this function. */
-
+	if(hash_insert(spt->spt_hash, &page->spt_elem) == NULL) {
+        succ = true;
+    }
 	return succ;
 }
 
@@ -111,7 +152,8 @@ vm_evict_frame (void) {
 static struct frame *
 vm_get_frame (void) {
 	struct frame *frame = NULL;
-	/* TODO: Fill this function. */
+	
+    frame = palloc_get_page(PAL_USER);
 
 	ASSERT (frame != NULL);
 	ASSERT (frame->page == NULL);
@@ -172,8 +214,10 @@ vm_do_claim_page (struct page *page) {
 }
 
 /* Initialize new supplemental page table */
+/*** team 7 ***/
 void
 supplemental_page_table_init (struct supplemental_page_table *spt UNUSED) {
+    hash_init(&spt->spt_hash, page_hash, page_less, NULL);
 }
 
 /* Copy supplemental page table from src to dst */
