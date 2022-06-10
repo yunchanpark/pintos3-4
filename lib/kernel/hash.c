@@ -103,6 +103,7 @@ hash_insert (struct hash *h, struct hash_elem *new) {
 
 /* Inserts NEW into hash table H, replacing any equal element
    already in the table, which is returned. */
+/* team 7 : swap용이라고 추측함. old 받아서 swap하고 new를 넣어주기 */
 struct hash_elem *
 hash_replace (struct hash *h, struct hash_elem *new) {
 	struct list *bucket = find_bucket (h, new);
