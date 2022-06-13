@@ -828,4 +828,3 @@ struct thread * get_child(int pid){
 	}
 	return NULL;
 }
-

@@ -5,7 +5,7 @@
 #include "threads/palloc.h"
 #include "threads/vaddr.h"
 #include <list.h>
-#include <mmu.h>
+#include "threads/mmu.h"
 
 enum vm_type {
 	/* page not initialized */
