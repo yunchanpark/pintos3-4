@@ -16,6 +16,7 @@ vm_init (void) {
 	register_inspect_intr ();
 	/* DO NOT MODIFY UPPER LINES. */
 	/* TODO: Your code goes here. */
+    list_init(&frame_list);
 }
 
 /*** team 7 : for hash ***/
@@ -82,29 +83,13 @@ err:
 /*** team : 7 ***/
 struct page *
 spt_find_page (struct supplemental_page_table *spt UNUSED, void *va UNUSED) {
-	/*** debugging ddalgi : cases~ ***/
-    // struct page *page;
-    // struct hash_iterator spt_iter;
-    
-    // hash_first(&spt_iter, &spt->spt_hash);
-
-    // while(hash_next(&spt_iter)) {
-    //     page = hash_entry(hash_cur(&spt_iter), struct page, spt_elem);
-    //     if(page->va == va) {
-    //         return page;
-    //     }
-    // }
-	// return NULL;
-
     struct page page; // fake page
-    page.va = va;
+    page.va = pg_round_down(va);
 
     struct hash_elem *search = hash_find(spt->spt_hash, &page.spt_elem);
     if(search != NULL) {
         return hash_entry(search, struct page, spt_elem);
     }
-
-    struct page *page = palloc_get_page(PAL_USER);
 
     return NULL;
 }
@@ -149,13 +134,21 @@ vm_evict_frame (void) {
  * and return it. This always return valid address. That is, if the user pool
  * memory is full, this function evicts the frame to get the available memory
  * space.*/
+/*** team 7 ***/
 static struct frame *
 vm_get_frame (void) {
-	struct frame *frame = NULL;
-	
-    frame = palloc_get_page(PAL_USER);
-
+	struct frame *frame = calloc(1, sizeof(struct frame));
 	ASSERT (frame != NULL);
+
+    void *temp = palloc_get_page(PAL_USER);
+    
+    if(!temp) {
+        PANIC("todo"); // implement later
+    }
+
+    frame->kva = temp;
+    list_push_front(&frame_list, &frame->f_elem);
+
 	ASSERT (frame->page == NULL);
 	return frame;
 }
@@ -191,11 +184,14 @@ vm_dealloc_page (struct page *page) {
 }
 
 /* Claim the page that allocate on VA. */
+/*** team 7 ***/
 bool
 vm_claim_page (void *va UNUSED) {
 	struct page *page = NULL;
-	/* TODO: Fill this function */
 
+    page = spt_find_page(&thread_current()->spt, va);
+    if (!page) 
+        return false;
 	return vm_do_claim_page (page);
 }
 
@@ -209,15 +205,22 @@ vm_do_claim_page (struct page *page) {
 	page->frame = frame;
 
 	/* TODO: Insert page table entry to map page's VA to frame's PA. */
+    /* from install_page */
+    struct thread *t = thread_current ();
 
-	return swap_in (page, frame->kva);
+	if (pml4_get_page (t->pml4, page->va) == NULL // pml4에 upage unmapping 상태이면
+			&& pml4_set_page (t->pml4, page->va, frame->kva, page->writable)) // pml4 set 함
+        return swap_in (page, frame->kva);
+
+    return false;
 }
 
 /* Initialize new supplemental page table */
 /*** team 7 ***/
 void
 supplemental_page_table_init (struct supplemental_page_table *spt UNUSED) {
-    hash_init(&spt->spt_hash, page_hash, page_less, NULL);
+    spt->spt_hash = calloc(1, sizeof(struct hash));
+    hash_init(spt->spt_hash, page_hash, page_less, NULL);
 }
 
 /* Copy supplemental page table from src to dst */

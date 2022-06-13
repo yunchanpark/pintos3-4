@@ -3,6 +3,9 @@
 #include <stdbool.h>
 #include <hash.h>   /*** team 8 ***/
 #include "threads/palloc.h"
+#include "threads/vaddr.h"
+#include <list.h>
+#include <mmu.h>
 
 enum vm_type {
 	/* page not initialized */
@@ -52,6 +55,7 @@ struct page {
     struct hash_elem spt_elem;
     bool activate; 
     int64_t age;
+    bool writable; /* r or rw */
 
 	/* Per-type data are binded into the union.
 	 * Each function automatically detects the current union */
@@ -66,9 +70,14 @@ struct page {
 };
 
 /* The representation of "frame" */
+/*** team 7 ***/
+struct list frame_list; /* initialized at vm_init */
+
 struct frame {
 	void *kva;
 	struct page *page;
+
+    struct list_elem f_elem;
 };
 
 /* The function table for page operations.
