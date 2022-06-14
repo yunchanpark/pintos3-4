@@ -19,8 +19,9 @@ test_main (void)
   CHECK ((handle = open ("sample.txt")) > 1, "open \"sample.txt\"");
   buffer = get_boundary_area () - sizeof sample / 2;
   byte_cnt = read (handle, buffer, 20);
-  
+//   msg("__debug : 1\n");
   if ((pid = fork("child"))){
+    // msg("__debug : 2\n");
     wait (pid);
 
     byte_cnt = read (handle, buffer + 20, sizeof sample - 21);
@@ -34,6 +35,7 @@ test_main (void)
       msg ("Parent success");
     }
 
+    // msg("__debug : 3\n");
     close(handle);
   } else {
     msg ("child run");
