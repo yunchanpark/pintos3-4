@@ -258,9 +258,21 @@ supplemental_page_table_init (struct supplemental_page_table *spt UNUSED) {
 }
 
 /* Copy supplemental page table from src to dst */
+/* team 7 */
 bool
 supplemental_page_table_copy (struct supplemental_page_table *dst UNUSED,
 		struct supplemental_page_table *src UNUSED) {
+    struct hash_iterator i;
+
+    hash_first (&i, src->spt_hash);
+    while (hash_next (&i))
+    {
+        struct page *src_p = hash_entry (hash_cur (&i), struct page, spt_elem);
+        bool check = vm_alloc_page(VM_ANON, src_p->va, src_p->writable);
+        if (!check) 
+            return false;
+    }
+    return true;
 }
 
 /* Free the resource hold by the supplemental page table */
@@ -268,4 +280,12 @@ void
 supplemental_page_table_kill (struct supplemental_page_table *spt UNUSED) {
 	/* TODO: Destroy all the supplemental_page_table hold by thread and
 	 * TODO: writeback all the modified contents to the storage. */
+    struct hash_iterator i;
+
+    hash_first (&i, spt->spt_hash);
+    while (hash_next (&i))
+    {
+        struct page *curr_p = hash_entry (hash_cur (&i), struct page, spt_elem);
+        destroy(curr_p);
+    }
 }
