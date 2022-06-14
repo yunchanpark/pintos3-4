@@ -52,8 +52,9 @@ uninit_initialize (struct page *page, void *kva) {
 	void *aux = uninit->aux;
 
 	/* TODO: You may need to fix this function. */
-	return uninit->page_initializer (page, uninit->type, kva) &&
-		(init ? init (page, aux) : true);
+    /*** debugging ddalgui~ ***/
+	return uninit->page_initializer (page, uninit->type, kva) && // type init
+		(init ? init (page, aux) : true); // lazy init
 }
 
 /* Free the resources hold by uninit_page. Although most of pages are transmuted

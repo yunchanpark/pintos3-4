@@ -4,7 +4,10 @@
 struct page;
 enum vm_type;
 
+/*** team 7 ***/
 struct anon_page {
+    enum vm_type type;
+    /* todo : add swap slot */
 };
 
 void vm_anon_init (void);

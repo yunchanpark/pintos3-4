@@ -4,6 +4,7 @@
 #include "vm/vm.h"
 #include "vm/inspect.h"
 
+
 /* Initializes the virtual memory subsystem by invoking each subsystem's
  * intialize codes. */
 void
@@ -59,6 +60,7 @@ static struct frame *vm_evict_frame (void);
 /* Create the pending page object with initializer. If you want to create a
  * page, do not create it directly and make it through this function or
  * `vm_alloc_page`. */
+/*** team 7 ***/
 bool
 vm_alloc_page_with_initializer (enum vm_type type, void *upage, bool writable,
 		vm_initializer *init, void *aux) {
@@ -66,14 +68,33 @@ vm_alloc_page_with_initializer (enum vm_type type, void *upage, bool writable,
 	ASSERT (VM_TYPE(type) != VM_UNINIT)
 
 	struct supplemental_page_table *spt = &thread_current ()->spt;
+    bool (*initializer) (struct page *, enum vm_type, void *kva); /*** debugging ddalgui ***/
 
 	/* Check wheter the upage is already occupied or not. */
 	if (spt_find_page (spt, upage) == NULL) {
-		/* TODO: Create the page, fetch the initialier according to the VM type,
-		 * TODO: and then create "uninit" page struct by calling uninit_new. You
-		 * TODO: should modify the field after calling the uninit_new. */
+        struct page *page = calloc(1, sizeof(struct page));
+        ASSERT (page != NULL);
 
-		/* TODO: Insert the page into the spt. */
+        switch (VM_TYPE(type)) {
+            case VM_ANON :
+                initializer = anon_initializer;
+                break;
+            case VM_FILE :
+                initializer = file_backed_initializer;
+                break;
+            default :
+                goto err;                
+        }
+        
+        uninit_new(page, upage, init, type, aux, initializer); /*** debugging ddalgui : type? marker? ***/
+        page->writable = writable; /*** debugging ddalgui ***/
+
+        return spt_insert_page(spt, page); /* 변경 */
+        
+        // if (!condition)
+        //     goto err;
+            
+        // return true;
 	}
 err:
 	return false;
@@ -171,8 +192,21 @@ vm_try_handle_fault (struct intr_frame *f UNUSED, void *addr UNUSED,
 	struct page *page = NULL;
 	/* TODO: Validate the fault */
 	/* TODO: Your code goes here */
+    page = spt_find_page(spt, addr); /* 변경 */
+    if (page == NULL) {
+        goto err;
+    }
+    else {
+        return vm_do_claim_page (page);
+    }
 
-	return vm_do_claim_page (page);
+    // if (page->operations->type == VM_UNINIT)
+    //     return vm_do_claim_page (page);
+    // else 
+    //     goto err;
+
+err :
+    return false;
 }
 
 /* Free the page.
@@ -219,7 +253,7 @@ vm_do_claim_page (struct page *page) {
 /*** team 7 ***/
 void
 supplemental_page_table_init (struct supplemental_page_table *spt UNUSED) {
-    spt->spt_hash = calloc(1, sizeof(struct hash));
+    spt->spt_hash = (struct hash *)calloc(1, sizeof(struct hash));
     hash_init(spt->spt_hash, page_hash, page_less, NULL);
 }
 

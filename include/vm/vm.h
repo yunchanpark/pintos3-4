@@ -21,8 +21,9 @@ enum vm_type {
 
 	/* Auxillary bit flag marker for store information. You can add more
 	 * markers, until the value is fit in the int. */
-	VM_MARKER_0 = (1 << 3),
-	VM_MARKER_1 = (1 << 4),
+    /*** team 7 ***/
+	VM_MARKER_0 = (1 << 3), // stack 
+	VM_MARKER_1 = (1 << 4), // heap
 
 	/* DO NOT EXCEED THIS VALUE. */
 	VM_MARKER_END = (1 << 31),
@@ -38,7 +39,8 @@ enum vm_type {
 struct page_operations;
 struct thread;
 
-#define VM_TYPE(type) ((type) & 7)
+#define VM_TYPE(type) ((type) & 7) // 111
+#define VM_MARKER(marker) ((marker) & ~7) // team 7
 
 /* The representation of "page".
  * This is kind of "parent class", which has four "child class"es, which are
@@ -53,8 +55,6 @@ struct page {
 	/* Your implementation */
     /*** team 7 ***/
     struct hash_elem spt_elem;
-    bool activate; 
-    int64_t age;
     bool writable; /* r or rw */
 
 	/* Per-type data are binded into the union.
@@ -102,7 +102,7 @@ struct page_operations {
 
 /*** team 7 ***/
 struct supplemental_page_table {
-    struct hash *spt_hash;
+    struct hash *spt_hash; // debugging ddalgui
 };
 
 #include "threads/thread.h"

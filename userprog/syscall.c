@@ -16,7 +16,7 @@
 #include "threads/vaddr.h"
 #include "userprog/process.h"
 #include "threads/synch.h"
-
+#include "vm/vm.h"
 
 void syscall_entry (void);
 void syscall_handler (struct intr_frame *);
@@ -83,7 +83,9 @@ void check_address(const uint64_t* addr){
 	/* what if the user provides an invalid pointer, a pointer to kernel memory, 
 	 * or a block partially in one of those regions */
 	/* 잘못된 접근인 경우, 프로세스 종료 */
-	if (!is_user_vaddr(addr) || addr == NULL || pml4_get_page(t->pml4, addr) == NULL)
+	// if (!is_user_vaddr(addr) || addr == NULL || pml4_get_page(t->pml4, addr) == NULL)
+    /* team 7 */
+	if (!is_user_vaddr(addr) || addr == NULL || !spt_find_page(&t->spt, addr))
 		exit(-1);
 } 
 
