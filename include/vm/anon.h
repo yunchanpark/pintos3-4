@@ -6,7 +6,7 @@ enum vm_type;
 
 /*** team 7 ***/
 struct anon_page {
-    enum vm_type type;
+    enum vm_type type; // stack, heap...
     /* todo : add swap slot */
 };
 

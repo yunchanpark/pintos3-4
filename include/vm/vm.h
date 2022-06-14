@@ -6,6 +6,7 @@
 #include "threads/vaddr.h"
 #include <list.h>
 #include "threads/mmu.h"
+#include <string.h>
 
 enum vm_type {
 	/* page not initialized */
@@ -88,7 +89,7 @@ struct page_operations {
 	bool (*swap_in) (struct page *, void *);
 	bool (*swap_out) (struct page *);
 	void (*destroy) (struct page *);
-	enum vm_type type;
+	enum vm_type type; // VM_ANON...
 };
 
 #define swap_in(page, v) (page)->operations->swap_in ((page), v)

@@ -265,12 +265,37 @@ supplemental_page_table_copy (struct supplemental_page_table *dst UNUSED,
     struct hash_iterator i;
 
     hash_first (&i, src->spt_hash);
-    while (hash_next (&i))
-    {
+    while (hash_next (&i)) // iterate src
+    {      
+        // 1. iterate src spt and get ref page
         struct page *src_p = hash_entry (hash_cur (&i), struct page, spt_elem);
-        bool check = vm_alloc_page(VM_ANON, src_p->va, src_p->writable);
-        if (!check) 
-            return false;
+
+        // 2. allocate new page at dst(current thread)
+        //    이 단계에서 struct page 구성 자체는 완료됨 (vm_alloc + uninit_new)
+        bool check = vm_alloc_page(src_p->uninit.type, src_p->va, src_p->writable);
+        ASSERT (check != false);
+        
+        // 3. get new page : find page from dst spt (vm alloc returns bool type)
+        //    다음 작업을 위해서 새로 만든 페이지를 꺼내어 놓음
+        struct page *dst_p = spt_find_page(dst, src_p->va);
+        ASSERT (dst_p != NULL);
+
+        // 4. virtual - physical mapping (dst)
+        check = vm_do_claim_page(dst_p);
+
+        // 5. get src page's content
+        switch(VM_TYPE(dst_p->operations->type)) {
+            case VM_ANON :
+                memcpy(dst_p->frame->kva, src_p->frame->kva, PGSIZE);
+                break;
+            
+            case VM_FILE :
+                memcpy(dst_p->frame->kva, src_p->frame->kva, PGSIZE);
+                break;
+            
+            default :
+                break;
+        }
     }
     return true;
 }
