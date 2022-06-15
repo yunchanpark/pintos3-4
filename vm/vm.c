@@ -184,6 +184,18 @@ vm_get_frame (void) {
 /* Growing the stack. */
 static void
 vm_stack_growth (void *addr UNUSED) {
+    void *st_bottom = pg_round_down(addr);
+    if(st_bottom <= USER_STACK - (1 << 20)) // 1MB 확인
+        goto err;
+
+    bool succ = vm_alloc_page(VM_MARKER_0 | VM_ANON, st_bottom, 1);
+    if (!succ) {
+        goto err;
+    }
+    thread_current()->stack_bottom = st_bottom;
+    return true;
+err :
+    return false;
 }
 
 /* Handle the fault on write_protected page */
@@ -195,22 +207,40 @@ vm_handle_wp (struct page *page UNUSED) {
 bool
 vm_try_handle_fault (struct intr_frame *f UNUSED, void *addr UNUSED,
 		bool user UNUSED, bool write UNUSED, bool not_present UNUSED) {
-	struct supplemental_page_table *spt UNUSED = &thread_current ()->spt;
 	struct page *page = NULL;
-	/* TODO: Validate the fault */
-	/* TODO: Your code goes here */
+    struct thread *curr = thread_current();
+	struct supplemental_page_table *spt UNUSED = &curr->spt;
+    
+    // printf("__debug : user %d : write %d : not_present %d\n", user, write, not_present);
+    /* case : stack growth */
+    uintptr_t s_rsp;
+
+    if (user) 
+        s_rsp = f->rsp;
+    else 
+        s_rsp = curr->tf.rsp;
+    
+    // printf("__debug : rsp: %p, addr: %p, stack_bottom: %p\n", s_rsp, (uintptr_t)(pg_round_up(addr)), curr->stack_bottom);
+    // ASSERT (pg_round_down(s_rsp) == curr->stack_bottom); // rsp 잘 들어왔나 확인용
+    // printf("__debug : user check%d\n", user);
+    /* stack growth page fault check */
+    if (addr <= USER_STACK && addr > USER_STACK - (1 << 20) && write) {
+        // printf("__debug : heeeyyyyy~~~\n");
+        vm_stack_growth(addr);
+
+        //rsp 값이 변하지 않았다면 실패일 듯?
+        // if (pg_round_down(s_rsp) == curr->stack_bottom)
+        //     goto err;
+        
+    }
+    /* case : lazy load page fault */
     page = spt_find_page(spt, addr); /* 변경 */
     if (page == NULL) {
+        // printf("__debug : page NULL check\n");
         goto err;
     }
-    else {
+    else 
         return vm_do_claim_page (page);
-    }
-
-    // if (page->operations->type == VM_UNINIT)
-    //     return vm_do_claim_page (page);
-    // else 
-    //     goto err;
 
 err :
     return false;

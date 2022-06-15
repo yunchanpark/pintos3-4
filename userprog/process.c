@@ -829,6 +829,7 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
 	return true;
 }
 
+/* team 7 */
 static bool
 setup_stack (struct intr_frame *if_) {
 	bool success = false;
@@ -843,8 +844,11 @@ setup_stack (struct intr_frame *if_) {
         return false;
 
     success = vm_claim_page(stack_bottom);
-    if (success)
+    
+    if (success) {
         if_->rsp = USER_STACK;
+        thread_current()->stack_bottom = (uintptr_t)stack_bottom; // for fault handling
+    }
 
 	return success;
 }

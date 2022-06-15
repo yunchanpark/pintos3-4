@@ -40,7 +40,7 @@ enum vm_type {
 struct page_operations;
 struct thread;
 
-#define VM_TYPE(type) ((type) & 7) // 111
+#define VM_TYPE(type) ((type) & 7) // 111 > 000 >> 1000 & 000
 #define VM_MARKER(marker) ((marker) & ~7) // team 7
 
 /* The representation of "page".
