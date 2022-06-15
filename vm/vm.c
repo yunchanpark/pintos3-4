@@ -192,7 +192,9 @@ vm_stack_growth (void *addr UNUSED) {
     if (!succ) {
         goto err;
     }
+    printf("__debug : stackbottom 1: %d\n", thread_current()->stack_bottom);
     thread_current()->stack_bottom = st_bottom;
+    printf("__debug : stackbottom 2: %d\n", thread_current()->stack_bottom);
     return true;
 err :
     return false;
@@ -214,17 +216,19 @@ vm_try_handle_fault (struct intr_frame *f UNUSED, void *addr UNUSED,
     // printf("__debug : user %d : write %d : not_present %d\n", user, write, not_present);
     /* case : stack growth */
     uintptr_t s_rsp;
+    // uintptr_t s_rsp = curr->vm_rsp;
 
     if (user) 
         s_rsp = f->rsp;
     else 
         s_rsp = curr->tf.rsp;
     
+    printf("__debug : %d\n", s_rsp);
     // printf("__debug : rsp: %p, addr: %p, stack_bottom: %p\n", s_rsp, (uintptr_t)(pg_round_up(addr)), curr->stack_bottom);
     // ASSERT (pg_round_down(s_rsp) == curr->stack_bottom); // rsp 잘 들어왔나 확인용
     // printf("__debug : user check%d\n", user);
     /* stack growth page fault check */
-    if (addr <= USER_STACK && addr > USER_STACK - (1 << 20) && write) {
+    if (s_rsp - (uintptr_t)addr == 0x8 || addr <= USER_STACK && addr > USER_STACK - (1 << 20) && write) {
         // printf("__debug : heeeyyyyy~~~\n");
         vm_stack_growth(addr);
 
