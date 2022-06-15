@@ -258,7 +258,7 @@ supplemental_page_table_init (struct supplemental_page_table *spt UNUSED) {
 }
 
 /* Copy supplemental page table from src to dst */
-/* team 7 */
+/* team 7 : hyeRexx */
 bool
 supplemental_page_table_copy (struct supplemental_page_table *dst UNUSED,
 		struct supplemental_page_table *src UNUSED) {
@@ -273,6 +273,7 @@ supplemental_page_table_copy (struct supplemental_page_table *dst UNUSED,
         // 2. allocate new page at dst(current thread)
         //    이 단계에서 struct page 구성 자체는 완료됨 (vm_alloc + uninit_new)
         bool check = vm_alloc_page_with_initializer(src_p->uninit.type, src_p->va, src_p->writable, src_p->uninit.page_initializer, src_p->uninit.aux);
+        // bool check = vm_alloc_page(src_p->uninit.type, src_p->va, src_p->writable);
         // ASSERT (check != false);
         if (!check) 
             goto err;
@@ -299,9 +300,10 @@ supplemental_page_table_copy (struct supplemental_page_table *dst UNUSED,
                 memcpy(dst_p->frame->kva, src_p->frame->kva, PGSIZE);
                 break;
             
-            case VM_UNINIT :
-                memcpy(dst_p->uninit.aux, src_p->uninit.aux, sizeof(src_p->uninit.aux));
-                break;
+            /**/
+            // case VM_UNINIT :
+            //     memcpy(dst_p->uninit.aux, src_p->uninit.aux, sizeof(src_p->uninit.aux));
+            //     break;
         }
     }
     return true;
