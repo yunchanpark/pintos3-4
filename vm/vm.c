@@ -308,9 +308,9 @@ supplemental_page_table_copy (struct supplemental_page_table *dst UNUSED,
                 break;
             
             /**/
-            // case VM_UNINIT :
-            //     memcpy(dst_p->uninit.aux, src_p->uninit.aux, sizeof(src_p->uninit.aux));
-            //     break;
+            case VM_UNINIT :
+                memcpy(dst_p->uninit.aux, src_p->uninit.aux, sizeof(src_p->uninit.aux));
+                break;
         }
     }
     return true;
@@ -324,5 +324,6 @@ void
 supplemental_page_table_kill (struct supplemental_page_table *spt UNUSED) {
 	/* TODO: Destroy all the supplemental_page_table hold by thread and
 	 * TODO: writeback all the modified contents to the storage. */
-    hash_destroy(spt->spt_hash, page_destructor);
+    if (spt->spt_hash) 
+        hash_destroy(spt->spt_hash, page_destructor);
 }
