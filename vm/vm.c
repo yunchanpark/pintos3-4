@@ -37,6 +37,13 @@ page_less (const struct hash_elem *a_, const struct hash_elem *b_, void *aux UNU
     return a->va < b->va;
 }
 
+/* use as destructor */
+void 
+page_destructor (struct hash_elem *h_elem, void *aux) {
+    struct page *page = hash_entry(h_elem, struct page, spt_elem);
+    vm_dealloc_page(page);
+}
+
 
 /* Get the type of the page. This function is useful if you want to know the
  * type of the page after it will be initialized.
@@ -258,7 +265,7 @@ supplemental_page_table_init (struct supplemental_page_table *spt UNUSED) {
 }
 
 /* Copy supplemental page table from src to dst */
-/* team 7 */
+/* team 7 : hyeRexx */
 bool
 supplemental_page_table_copy (struct supplemental_page_table *dst UNUSED,
 		struct supplemental_page_table *src UNUSED) {
@@ -273,6 +280,7 @@ supplemental_page_table_copy (struct supplemental_page_table *dst UNUSED,
         // 2. allocate new page at dst(current thread)
         //    이 단계에서 struct page 구성 자체는 완료됨 (vm_alloc + uninit_new)
         bool check = vm_alloc_page_with_initializer(src_p->uninit.type, src_p->va, src_p->writable, src_p->uninit.page_initializer, src_p->uninit.aux);
+        // bool check = vm_alloc_page(src_p->uninit.type, src_p->va, src_p->writable);
         // ASSERT (check != false);
         if (!check) 
             goto err;
@@ -299,6 +307,7 @@ supplemental_page_table_copy (struct supplemental_page_table *dst UNUSED,
                 memcpy(dst_p->frame->kva, src_p->frame->kva, PGSIZE);
                 break;
             
+            /**/
             case VM_UNINIT :
                 memcpy(dst_p->uninit.aux, src_p->uninit.aux, sizeof(src_p->uninit.aux));
                 break;
@@ -315,12 +324,6 @@ void
 supplemental_page_table_kill (struct supplemental_page_table *spt UNUSED) {
 	/* TODO: Destroy all the supplemental_page_table hold by thread and
 	 * TODO: writeback all the modified contents to the storage. */
-    struct hash_iterator i;
-
-    hash_first (&i, spt->spt_hash);
-    while (hash_next (&i))
-    {
-        struct page *curr_p = hash_entry (hash_cur (&i), struct page, spt_elem);
-        destroy(curr_p);
-    }
+    if (spt->spt_hash) 
+        hash_destroy(spt->spt_hash, page_destructor);
 }
