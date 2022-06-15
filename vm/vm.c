@@ -37,6 +37,13 @@ page_less (const struct hash_elem *a_, const struct hash_elem *b_, void *aux UNU
     return a->va < b->va;
 }
 
+/* use as destructor */
+void 
+page_destructor (struct hash_elem *h_elem, void *aux) {
+    struct page *page = hash_entry(h_elem, struct page, spt_elem);
+    vm_dealloc_page(page);
+}
+
 
 /* Get the type of the page. This function is useful if you want to know the
  * type of the page after it will be initialized.
@@ -317,12 +324,5 @@ void
 supplemental_page_table_kill (struct supplemental_page_table *spt UNUSED) {
 	/* TODO: Destroy all the supplemental_page_table hold by thread and
 	 * TODO: writeback all the modified contents to the storage. */
-    struct hash_iterator i;
-
-    hash_first (&i, spt->spt_hash);
-    while (hash_next (&i))
-    {
-        struct page *curr_p = hash_entry (hash_cur (&i), struct page, spt_elem);
-        destroy(curr_p);
-    }
+    hash_destroy(spt->spt_hash, page_destructor);
 }
