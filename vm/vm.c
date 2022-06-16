@@ -92,7 +92,7 @@ vm_alloc_page_with_initializer (enum vm_type type, void *upage, bool writable,
             default :
                 goto err;                
         }
-        
+        upage = pg_round_down(upage);
         uninit_new(page, upage, init, type, aux, initializer); /*** debugging ddalgui : type? marker? ***/
         page->writable = writable; /*** debugging ddalgui ***/
 
@@ -127,6 +127,7 @@ spt_find_page (struct supplemental_page_table *spt UNUSED, void *va UNUSED) {
 bool
 spt_insert_page (struct supplemental_page_table *spt UNUSED, struct page *page UNUSED) {
 	int succ = false;
+    if (spt == NULL || spt == NULL) return false;
 	if(hash_insert(spt->spt_hash, &page->spt_elem) == NULL) {
         succ = true;
     }
@@ -184,6 +185,10 @@ vm_get_frame (void) {
 /* Growing the stack. */
 static void
 vm_stack_growth (void *addr UNUSED) {
+    void *pg_down_addr = pg_round_down(addr);
+    if (pg_down_addr >= (void *)(USER_STACK  - (1 << 20))) {
+        vm_alloc_page(VM_MARKER_0 | VM_ANON, pg_down_addr, 1);
+    }
 }
 
 /* Handle the fault on write_protected page */
@@ -195,25 +200,31 @@ vm_handle_wp (struct page *page UNUSED) {
 bool
 vm_try_handle_fault (struct intr_frame *f UNUSED, void *addr UNUSED,
 		bool user UNUSED, bool write UNUSED, bool not_present UNUSED) {
-	struct supplemental_page_table *spt UNUSED = &thread_current ()->spt;
+    if(!not_present) return false;
 	struct page *page = NULL;
-	/* TODO: Validate the fault */
-	/* TODO: Your code goes here */
+    struct thread *curr = thread_current();
+	struct supplemental_page_table *spt UNUSED = &curr->spt;
+    void *s_rsp = (void *)(user ? f->rsp : curr->vm_rsp);
+    // printf("=====================\n");
+    // printf("s_rsp: %p\n", s_rsp);
+    // printf("addr: %p\n", addr);
+    // printf("alloc - range: %p", (pg_round_down(addr) + PGSIZE));
+    // printf(" ~ %p\n", pg_round_down(addr));
+    // printf("curr_rsp: %p\n", curr->vm_rsp);
+    // printf("user: %d\n", user);
+    // printf("write: %d\n", write);
+    // printf("not_present: %d\n", not_present);
+
+    /* stack growth page fault check */
+    if (s_rsp - addr == 0x8 ||((void *)USER_STACK > addr) &&  (addr > s_rsp)) {
+        // printf("들어왔니??");
+        vm_stack_growth(addr);
+    }
+    /* case : lazy load page fault */
     page = spt_find_page(spt, addr); /* 변경 */
-    if (page == NULL) {
-        goto err;
-    }
-    else {
-        return vm_do_claim_page (page);
-    }
-
-    // if (page->operations->type == VM_UNINIT)
-    //     return vm_do_claim_page (page);
-    // else 
-    //     goto err;
-
-err :
-    return false;
+    // printf("page: %p\n", page);
+    // printf("=====================\n");
+    return page == NULL ? false :vm_do_claim_page (page);
 }
 
 /* Free the page.

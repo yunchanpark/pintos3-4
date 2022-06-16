@@ -689,6 +689,7 @@ init_thread (struct thread *t, const char *name, int priority) {
 	/* mlfqs 관련 변경 */
 	t->nice = NICE_DEFAULT;
 	t->recent_cpu = RECENT_CPU_DEFAULT;
+    t->vm_rsp = t->tf.rsp; // team 7
 
 	list_init(&t->child_list);
 	sema_init(&t->wait_sema,0);
