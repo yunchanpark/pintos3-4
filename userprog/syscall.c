@@ -43,6 +43,7 @@ void check_address(const uint64_t*);
 static struct file *process_get_file(int fd);
 int process_add_file(struct file *file);
 void process_close_file(int fd);
+void check_rw(void *);
 
 /* Project2-extra */
 const int STDIN = 1;
@@ -85,7 +86,8 @@ void check_address(const uint64_t* addr){
 	/* 잘못된 접근인 경우, 프로세스 종료 */
 	// if (!is_user_vaddr(addr) || addr == NULL || pml4_get_page(t->pml4, addr) == NULL)
     /* team 7 */
-	if (!is_user_vaddr(addr) || addr == NULL || !spt_find_page(&t->spt, addr))
+	// if (!is_user_vaddr(addr) || addr == NULL || !spt_find_page(&t->spt, addr))
+	if (!is_user_vaddr(addr) || addr == NULL)
 		exit(-1);
 } 
 
@@ -126,6 +128,19 @@ void
 syscall_handler (struct intr_frame *f UNUSED) {
 	// TODO: Your implementation goes here.
 	int syscall_num = f->R.rax; // rax: system call number
+	ASSERT(is_user_vaddr(f->rsp));
+	thread_current()->vm_rsp = f->rsp;
+	// printf("-----------syscall---------\n");
+	// printf("rsp %p\n", f->rsp);
+	// printf("rdi %p\n", f->R.rdi);
+	// printf("rsi %p\n", f->R.rsi);
+	// uint64_t *pte = pml4_get_page(thread_current()->pml4, f->R.rsi);
+	// if (pte != NULL)
+	// 	printf("pte: %d\n", PTE_P & *pte);
+	// *(char *)f->R.rsi == "a";
+	// *(int *)NULL = 0;
+	// printf("rdx %p\n", f->R.rdx);
+	// printf("-----------syscall---------\n");
 	switch(syscall_num){
 		case SYS_HALT:                   /* Halt the operating system. */
 			halt();
@@ -263,6 +278,7 @@ int filesize (int fd){
 /* 수정완료 */
 int read (int fd, void *buffer, unsigned size){
 	check_address(buffer);
+	check_rw(buffer);
 	unsigned char *buf = buffer;
 	int readsize;
 	struct thread *curr = thread_current();
@@ -300,6 +316,7 @@ int read (int fd, void *buffer, unsigned size){
 /* 수정완료 */
 int write (int fd, const void *buffer, unsigned size){ 
 	check_address(buffer);
+	check_rw(buffer);
 	struct file *f = process_get_file(fd);
 	int writesize;
 
@@ -391,4 +408,14 @@ int dup2(int oldfd, int newfd){
 	close(newfd);
 	curr_fd_table[newfd] = f;
 	return newfd;
+}
+
+void check_rw(void *addr) {
+	// struct page *p1 = spt_find_page(&thread_current()->spt, addr);
+	// printf("page: %p\n", p1);
+	// *(char *)addr = "a";
+	struct page *p = spt_find_page(&thread_current()->spt, addr);
+	// printf("writable: %d\n\n\n", p->writable);
+	if (p != NULL && !p->writable)
+		exit(-1);
 }

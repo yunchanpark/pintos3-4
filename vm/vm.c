@@ -92,7 +92,7 @@ vm_alloc_page_with_initializer (enum vm_type type, void *upage, bool writable,
             default :
                 goto err;                
         }
-        
+        upage = pg_round_down(upage);
         uninit_new(page, upage, init, type, aux, initializer); /*** debugging ddalgui : type? marker? ***/
         page->writable = writable; /*** debugging ddalgui ***/
 
@@ -127,6 +127,7 @@ spt_find_page (struct supplemental_page_table *spt UNUSED, void *va UNUSED) {
 bool
 spt_insert_page (struct supplemental_page_table *spt UNUSED, struct page *page UNUSED) {
 	int succ = false;
+    if (spt == NULL || spt == NULL) return false;
 	if(hash_insert(spt->spt_hash, &page->spt_elem) == NULL) {
         succ = true;
     }
@@ -184,20 +185,10 @@ vm_get_frame (void) {
 /* Growing the stack. */
 static void
 vm_stack_growth (void *addr UNUSED) {
-    void *st_bottom = pg_round_down(addr);
-    if(st_bottom <= USER_STACK - (1 << 20)) // 1MB 확인
-        goto err;
-
-    bool succ = vm_alloc_page(VM_MARKER_0 | VM_ANON, st_bottom, 1);
-    if (!succ) {
-        goto err;
+    void *pg_down_addr = pg_round_down(addr);
+    if (pg_down_addr >= (void *)(USER_STACK  - (1 << 20))) {
+        vm_alloc_page(VM_MARKER_0 | VM_ANON, pg_down_addr, 1);
     }
-    printf("__debug : stackbottom 1: %d\n", thread_current()->stack_bottom);
-    thread_current()->stack_bottom = st_bottom;
-    printf("__debug : stackbottom 2: %d\n", thread_current()->stack_bottom);
-    return true;
-err :
-    return false;
 }
 
 /* Handle the fault on write_protected page */
@@ -209,45 +200,31 @@ vm_handle_wp (struct page *page UNUSED) {
 bool
 vm_try_handle_fault (struct intr_frame *f UNUSED, void *addr UNUSED,
 		bool user UNUSED, bool write UNUSED, bool not_present UNUSED) {
+    if(!not_present) return false;
 	struct page *page = NULL;
     struct thread *curr = thread_current();
 	struct supplemental_page_table *spt UNUSED = &curr->spt;
-    
-    // printf("__debug : user %d : write %d : not_present %d\n", user, write, not_present);
-    /* case : stack growth */
-    uintptr_t s_rsp;
-    // uintptr_t s_rsp = curr->vm_rsp;
+    void *s_rsp = (void *)(user ? f->rsp : curr->vm_rsp);
+    // printf("=====================\n");
+    // printf("s_rsp: %p\n", s_rsp);
+    // printf("addr: %p\n", addr);
+    // printf("alloc - range: %p", (pg_round_down(addr) + PGSIZE));
+    // printf(" ~ %p\n", pg_round_down(addr));
+    // printf("curr_rsp: %p\n", curr->vm_rsp);
+    // printf("user: %d\n", user);
+    // printf("write: %d\n", write);
+    // printf("not_present: %d\n", not_present);
 
-    if (user) 
-        s_rsp = f->rsp;
-    else 
-        s_rsp = curr->tf.rsp;
-    
-    printf("__debug : %d\n", s_rsp);
-    // printf("__debug : rsp: %p, addr: %p, stack_bottom: %p\n", s_rsp, (uintptr_t)(pg_round_up(addr)), curr->stack_bottom);
-    // ASSERT (pg_round_down(s_rsp) == curr->stack_bottom); // rsp 잘 들어왔나 확인용
-    // printf("__debug : user check%d\n", user);
     /* stack growth page fault check */
-    if (s_rsp - (uintptr_t)addr == 0x8 || addr <= USER_STACK && addr > USER_STACK - (1 << 20) && write) {
-        // printf("__debug : heeeyyyyy~~~\n");
+    if (s_rsp - addr == 0x8 ||((void *)USER_STACK > addr) &&  (addr > s_rsp)) {
+        // printf("들어왔니??");
         vm_stack_growth(addr);
-
-        //rsp 값이 변하지 않았다면 실패일 듯?
-        // if (pg_round_down(s_rsp) == curr->stack_bottom)
-        //     goto err;
-        
     }
     /* case : lazy load page fault */
     page = spt_find_page(spt, addr); /* 변경 */
-    if (page == NULL) {
-        // printf("__debug : page NULL check\n");
-        goto err;
-    }
-    else 
-        return vm_do_claim_page (page);
-
-err :
-    return false;
+    // printf("page: %p\n", page);
+    // printf("=====================\n");
+    return page == NULL ? false :vm_do_claim_page (page);
 }
 
 /* Free the page.

@@ -10,5 +10,10 @@
 void
 test_main (void)
 {
+  void *ret;
+  // __asm __volatile("mov %%rsp, %%rax\n":"=a" (ret):: "cc", "memory");
+  // msg("\nbefore-mov: %p\n", ret);
   asm volatile ("movq -4096(%rsp), %rax");
+  // __asm __volatile("mov %%rsp, %%rax\n":"=a" (ret):: "cc", "memory");
+  // msg("\nafter-mov: %p\n", ret);
 }

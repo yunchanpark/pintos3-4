@@ -847,9 +847,7 @@ setup_stack (struct intr_frame *if_) {
     
     if (success) {
         if_->rsp = USER_STACK;
-        printf("__debug : stackbottom 1: %d\n", thread_current());
-        thread_current()->stack_bottom = (uintptr_t)stack_bottom; // for fault handling
-        printf("__debug : stackbottom 2: %d\n", stack_bottom);
+		thread_current()->stack_bottom = stack_bottom;
     }
 
 	return success;
