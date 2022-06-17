@@ -82,7 +82,7 @@ file_backed_destroy (struct page *page) {
 void *
 do_mmap (void *addr, size_t length, int writable, struct file *ori_file, off_t offset) {
     // fail cases
-    if (!addr || !length || ori_file < 3 || pg_ofs(addr) || !file_length(ori_file)) 
+    if (addr <= 0 || ori_file < 3 || pg_ofs(addr) || !file_length(ori_file) || is_kernel_vaddr(addr) || (long)length <= 0 || offset % PGSIZE) 
         goto err;
     
     // reopen
