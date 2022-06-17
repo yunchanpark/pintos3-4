@@ -23,5 +23,4 @@ test_main (void)
   kernel = (void *) 0x8004000000 - 0x1000;
   CHECK (mmap (kernel, -0x8004000000 + 0x1000, 0, handle, 0) == MAP_FAILED,
          "try to mmap over kernel 2");
-
 }
