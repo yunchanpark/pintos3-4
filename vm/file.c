@@ -1,5 +1,5 @@
 /* file.c: Implementation of memory backed file object (mmaped object). */
-
+#include "threads/thread.h"
 #include "vm/vm.h"
 
 static bool file_backed_swap_in (struct page *page, void *kva);
@@ -56,15 +56,15 @@ file_backed_destroy (struct page *page) {
     struct thread *curr = thread_current();
 
     if (pml4_is_dirty(curr->pml4, page->va))
-        file_write(file_page->ori_file, page->frame->kva, file_page->page_read_bytes);
+        file_write_at(file_page->re_file, page->frame->kva, file_page->page_read_bytes, file_page->ofs);
     
-    if (file_page->page_cnt == 0)
-        close(file_page->re_file);
-    else 
-        file_page->page_cnt--;
+    if (file_page->page_cnt != 0)
+        *(file_page->page_cnt)--;
+    if(file_page->page_cnt == 0)
+        file_close(file_page->re_file);
 
     list_remove(&page->frame->f_elem);
-    free(page->frame);
+    // free(page->frame);
 }
 
 /* Do the mmap */
@@ -89,7 +89,11 @@ do_mmap (void *addr, size_t length, int writable, struct file *ori_file, off_t o
         if(page && page->frame)
             goto err;
     }
-
+    int *tmp = calloc(1, sizeof(int *));
+    *tmp = page_cnt;
+    // printf("==============================\n");
+    // printf("length: %d\n", length);
+    // printf("page_cnt: %d\n", page_cnt);
     // do mmap
     for (int i = 0; i < page_cnt; i++) {
         struct lazy_file *aux = calloc(1, sizeof(struct lazy_file));
@@ -98,15 +102,16 @@ do_mmap (void *addr, size_t length, int writable, struct file *ori_file, off_t o
         aux->re_file = file;
         aux->ofs = offset;
         aux->page_read_bytes = length < PGSIZE ? length : PGSIZE;
-        aux->page_cnt = page_cnt; 
-
+        aux->page_cnt = tmp;
+        // printf("aux->page: %d\n", *(aux->page_cnt));
+        // printf("aux->ofs: %d\n", aux->ofs);
         if (!vm_alloc_page_with_initializer(VM_FILE, addr + (PGSIZE * i), writable, lazy_load_file, aux))
             goto err;
 
         length -= aux->page_read_bytes;
         offset += aux->page_read_bytes;
     }
-
+    // printf("addr: %p\n", addr);
     return addr; 
 
 err :
@@ -125,13 +130,12 @@ do_munmap (void *addr) {
     if (!page->frame || page->operations->type != VM_FILE)
         goto err;
 
-    struct lazy_file *aux = page->uninit.aux;
-    for (int i = 0; i < aux->page_cnt; i++) {
+    for (int i = 0; i < page->file.page_cnt; i++) {
         page = spt_find_page(&curr->spt, addr + (i * PGSIZE));
         if (!page)
             goto err;
-        // else
-        //     file_backed_destroy(page);
+        else
+            file_backed_destroy(page);
     }
 
 err:
@@ -141,11 +145,12 @@ err:
 bool
 lazy_load_file(struct page *page, struct lazy_file *aux) {
     struct file *file = aux->re_file;
-    file_seek(file, aux->ofs);
-
-    if (file_read(file, page->frame->kva, aux->page_read_bytes) != aux->page_read_bytes)
-        return false;
-    
+    // printf("kva: %p\n", page->frame->kva);
+    // printf("ofs: %d\n", aux->ofs);
+    // printf("page_read_bytes: %d\n", aux->page_read_bytes);
+    // printf("file: %p\n", file);
+    file_read_at(file, page->frame->kva, aux->page_read_bytes, aux->ofs);
     free(aux);
+    // printf("==============================\n");
     return true;
 }
