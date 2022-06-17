@@ -22,6 +22,7 @@ file_open (struct inode *inode) {
 		file->pos = 0;
 		file->deny_write = false;
 		file->dup_count = 0;
+        file->map_count = 0;
 		return file;
 	} else {
 		inode_close (inode);

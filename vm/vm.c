@@ -169,7 +169,7 @@ vm_get_frame (void) {
 	struct frame *frame = calloc(1, sizeof(struct frame));
 	ASSERT (frame != NULL);
 
-    void *temp = palloc_get_page(PAL_USER);
+    void *temp = palloc_get_page(PAL_ZERO | PAL_USER);
     
     if(!temp) {
         PANIC("todo"); // implement later

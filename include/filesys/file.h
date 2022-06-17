@@ -10,6 +10,7 @@ struct file {
 	off_t pos;                  /* Current position. */
 	bool deny_write;            /* Has file_deny_write() been called? */
 	int dup_count;              /* duplicated count */
+    int map_count;              /* team 7 : for mmap*/
 };
 struct inode;
 
