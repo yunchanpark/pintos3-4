@@ -38,6 +38,10 @@ tid_t fork (const char *thread_name);
 int exec (const char *file_name);
 int dup2(int oldfd, int newfd);
 
+/* team 7 */
+void *mmap (void *addr, size_t length, int writable, int fd, off_t offset);
+void munmap (void *addr);
+
 /* syscall helper functions */
 void check_address(const uint64_t*);
 static struct file *process_get_file(int fd);
@@ -90,6 +94,16 @@ void check_address(const uint64_t* addr){
 	if (!is_user_vaddr(addr) || addr == NULL)
 		exit(-1);
 } 
+
+void check_rw(void *addr) {
+	// struct page *p1 = spt_find_page(&thread_current()->spt, addr);
+	// printf("page: %p\n", p1);
+	// *(char *)addr = "a";
+	struct page *p = spt_find_page(&thread_current()->spt, addr);
+	// printf("writable: %d\n\n\n", p->writable);
+	if (p != NULL && !p->writable)
+		exit(-1);
+}
 
 int process_add_file(struct file *f){
 	struct thread *curr = thread_current();
@@ -190,6 +204,16 @@ syscall_handler (struct intr_frame *f UNUSED) {
 		case SYS_DUP2:
 			f->R.rax = dup2(f->R.rdi, f->R.rsi);
 			break;
+        
+        /* hyeRexx */
+        case SYS_MMAP :
+            f->R.rax = mmap(f->R.rdi, f->R.rsi, f->R.rdx, f->R.r10, f->R.r8);
+            break;
+        
+        case SYS_MUNMAP :
+            munmap(f->R.rdi);
+            break;
+
 		default:						 /* call thread_exit() ? */
 			exit(-1);
 			break;
@@ -410,12 +434,13 @@ int dup2(int oldfd, int newfd){
 	return newfd;
 }
 
-void check_rw(void *addr) {
-	// struct page *p1 = spt_find_page(&thread_current()->spt, addr);
-	// printf("page: %p\n", p1);
-	// *(char *)addr = "a";
-	struct page *p = spt_find_page(&thread_current()->spt, addr);
-	// printf("writable: %d\n\n\n", p->writable);
-	if (p != NULL && !p->writable)
-		exit(-1);
+/* team 7 */
+void *mmap (void *addr, size_t length, int writable, int fd, off_t offset) {
+    struct file *file = process_get_file(fd);
+    return do_mmap(addr, length, writable, file, offset);
+}
+
+void munmap (void *addr) {
+    // 조건 확인 (맵핑 되어 있는 addr인지, mmap에 의해서 맵핑된 곳이 맞는지)
+    do_munmap(addr); 
 }
