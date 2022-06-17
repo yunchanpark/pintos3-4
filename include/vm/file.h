@@ -12,6 +12,7 @@ struct file_page {
     struct file *re_file;
     off_t ofs;
     size_t page_read_bytes;
+    size_t page_zero_bytes;
     int *page_cnt;
 };
 
@@ -20,6 +21,7 @@ struct lazy_file {
     struct file *re_file;
     off_t ofs;
     size_t page_read_bytes;
+    size_t page_zero_bytes;
     size_t *page_cnt;
 };
 

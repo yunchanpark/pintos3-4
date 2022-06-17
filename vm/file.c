@@ -37,6 +37,7 @@ file_backed_initializer (struct page *page, enum vm_type type, void *kva) {
     file_page->re_file = aux->re_file;
     file_page->ofs = aux->ofs;
     file_page->page_read_bytes = aux->page_read_bytes;
+    file_page->page_zero_bytes = aux->page_zero_bytes;
 
     return true;
 }
@@ -108,6 +109,7 @@ do_mmap (void *addr, size_t length, int writable, struct file *ori_file, off_t o
         aux->re_file = file;
         aux->ofs = offset;
         aux->page_read_bytes = length < PGSIZE ? length : PGSIZE;
+        aux->page_zero_bytes = PGSIZE - aux->page_read_bytes; 
         aux->page_cnt = tmp;
 
         if (!vm_alloc_page_with_initializer(VM_FILE, addr + (PGSIZE * i), writable, lazy_load_file, aux))

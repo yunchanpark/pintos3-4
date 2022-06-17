@@ -338,9 +338,8 @@ int read (int fd, void *buffer, unsigned size){
 
 
 /* 수정완료 */
-int write (int fd, const void *buffer, unsigned size){ 
+int write (int fd, const void *buffer, unsigned size){
 	check_address(buffer);
-	check_rw(buffer);
 	struct file *f = process_get_file(fd);
 	int writesize;
 
