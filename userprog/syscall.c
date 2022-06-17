@@ -383,6 +383,7 @@ unsigned tell (int fd){
 
 void close (int fd){
 	
+	// printf("close: %d\n", fd);
 	struct file *f = process_get_file(fd);
 
 	if(f == NULL)
@@ -436,11 +437,13 @@ int dup2(int oldfd, int newfd){
 
 /* team 7 */
 void *mmap (void *addr, size_t length, int writable, int fd, off_t offset) {
+	// printf("mmap: %p\n", addr);
     struct file *file = process_get_file(fd);
     return do_mmap(addr, length, writable, file, offset);
 }
 
 void munmap (void *addr) {
+	// printf("munmap: %p\n", addr);
     // 조건 확인 (맵핑 되어 있는 addr인지, mmap에 의해서 맵핑된 곳이 맞는지)
     do_munmap(addr); 
 }

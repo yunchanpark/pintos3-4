@@ -12,7 +12,7 @@ struct file_page {
     struct file *re_file;
     off_t ofs;
     size_t page_read_bytes;
-    size_t page_cnt;
+    int *page_cnt;
 };
 
 struct lazy_file {
@@ -20,7 +20,7 @@ struct lazy_file {
     struct file *re_file;
     off_t ofs;
     size_t page_read_bytes;
-    size_t page_cnt;
+    size_t *page_cnt;
 };
 
 void vm_file_init (void);
