@@ -24,7 +24,7 @@ struct lazy_file {
 };
 
 struct lock file_lock;
-struct lock frame_lock;
+
 
 void vm_file_init (void);
 bool file_backed_initializer (struct page *page, enum vm_type type, void *kva);

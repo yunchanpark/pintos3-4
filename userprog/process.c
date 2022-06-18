@@ -809,7 +809,6 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
 	ASSERT (pg_ofs (upage) == 0);
 	ASSERT (ofs % PGSIZE == 0);
 
-
 	while (read_bytes > 0 || zero_bytes > 0) {
 		/* Do calculate how to fill this page.
 		 * We will read PAGE_READ_BYTES bytes from FILE
@@ -824,6 +823,7 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
 		aux->file = file;
         aux->page_read_bytes = page_read_bytes;
         aux->page_zero_bytes = page_zero_bytes;
+    
         aux->ofs = ofs;
     
 		if (!vm_alloc_page_with_initializer (VM_ANON, upage,

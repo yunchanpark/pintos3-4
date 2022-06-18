@@ -8,6 +8,7 @@
 #include "threads/mmu.h"
 #include <string.h>
 
+
 enum vm_type {
 	/* page not initialized */
 	VM_UNINIT = 0,
@@ -53,7 +54,7 @@ struct page {
 	void *va;              /* Address in terms of user space */
 	struct frame *frame;   /* Back reference for frame */
 
-	/* Your implementation */
+/* Your implementation */
     /*** team 7 ***/
     struct hash_elem spt_elem;
     bool writable; /* r or rw */
@@ -105,6 +106,9 @@ struct page_operations {
 struct supplemental_page_table {
     struct hash *spt_hash; // debugging ddalgui
 };
+
+struct lock frame_lock;
+
 
 #include "threads/thread.h"
 void supplemental_page_table_init (struct supplemental_page_table *spt);
