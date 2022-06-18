@@ -762,9 +762,9 @@ install_page (void *upage, void *kpage, bool writable) {
 static bool
 lazy_load_segment (struct page *page, void *aux) {
 	/* TODO: Load the segment from the file */
-    struct file *running_file = thread_current()->running;
+    // struct file *running_file = thread_current()->running;
     struct lazy_aux *l_aux = aux;
-    
+    struct file *running_file = l_aux->file;
 	/* TODO: This called when the first page fault occurs on address VA. */
     file_seek(running_file, l_aux->ofs);
     if (file_read(running_file, page->frame->kva, l_aux->page_read_bytes) != l_aux->page_read_bytes){
@@ -811,6 +811,7 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
         ASSERT (aux != NULL);
 
 		/* TODO: Set up aux to pass information to the lazy_load_segment. */
+		aux->file = file;
         aux->page_read_bytes = page_read_bytes;
         aux->page_zero_bytes = page_zero_bytes;
         aux->ofs = ofs;

@@ -19,6 +19,7 @@ struct lazy_aux {
     size_t page_read_bytes;
     size_t page_zero_bytes;
     off_t ofs; // file_seek offset
+    struct file *file;
 };
 
 #endif /* userprog/process.h */
