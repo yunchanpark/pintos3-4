@@ -6,7 +6,6 @@
 static bool file_backed_swap_in (struct page *page, void *kva);
 static bool file_backed_swap_out (struct page *page);
 static void file_backed_destroy (struct page *page);
-static bool lazy_load_file (struct page *page, struct lazy_file *aux); /* team 7 */
 
 
 
@@ -46,6 +45,7 @@ file_backed_initializer (struct page *page, enum vm_type type, void *kva) {
 static bool
 file_backed_swap_in (struct page *page, void *kva) {
 	struct file_page *file_page UNUSED = &page->file;
+    return true;
 }
 
 /* Swap out the page by writeback contents to the file. */
