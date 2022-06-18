@@ -359,20 +359,26 @@ supplemental_page_table_copy (struct supplemental_page_table *dst UNUSED,
     hash_first (&i, src->spt_hash);
     while (hash_next (&i)) {      
         struct page *src_p = hash_entry (hash_cur (&i), struct page, spt_elem);
-        // printf("copy-type: %d\n", src_p->operations->type);
+        // printf("copy-type: %d\n", src_p->uninit.type);
         // printf("copy-init: %p\n", src_p->uninit.init);
         switch (src_p->operations->type) {
         case VM_ANON: {
-            if(!vm_alloc_page_with_initializer(page_get_type(src_p), src_p->va, src_p->writable, NULL, NULL)) {
-                goto err;
+            if(VM_MARKER(src_p->uninit.type)) {
+                if(!vm_alloc_page_with_initializer(page_get_type(src_p), src_p->va, src_p->writable, src_p->uninit.init, NULL)) {
+                    goto err;
+                }
+            }else {
+                if(!vm_alloc_page_with_initializer(page_get_type(src_p), src_p->va, src_p->writable, NULL, NULL)) {
+                    goto err;
+                }
             }
-            break;
             struct page *dst_p = spt_find_page(dst, src_p->va);
             if (dst_p == NULL)
                 goto err;
             if (!vm_do_claim_page(dst_p)) 
                 goto err;
             memcpy(dst_p->frame->kva, src_p->frame->kva, PGSIZE);
+            break;
         }
         case VM_FILE: {
             struct file_page *file_page = &src_p->file; 
