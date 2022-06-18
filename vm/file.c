@@ -64,18 +64,24 @@ file_backed_destroy (struct page *page) {
         lock_acquire(&file_lock);
         file_write_at(file_page->re_file, page->frame->kva, file_page->page_read_bytes, file_page->ofs);
         lock_release(&file_lock);
+        pml4_set_dirty(curr->pml4, page->frame->kva, false);
     }
     
-    if (file_page->page_cnt != 0)
+    if (*(file_page->page_cnt) != 0)
         *(file_page->page_cnt)--;
-    if(file_page->page_cnt == 0)
+    if(*(file_page->page_cnt) == 0) {
+        lock_acquire(&file_lock);
         file_close(file_page->re_file);
+        lock_release(&file_lock);
+        free(file_page->page_cnt);
+    }
 
-    
     lock_acquire(&frame_lock);
     list_remove(&page->frame->f_elem);
     lock_release(&frame_lock);
-    // free(page->frame);
+    pml4_clear_page(curr->pml4, page->va);
+    palloc_free_page(page->frame->kva);
+    free(page->frame);
 }
 
 /* Do the mmap */
@@ -141,8 +147,7 @@ do_munmap (void *addr) {
         page = spt_find_page(&curr->spt, addr + (i * PGSIZE));
         if (!page)
             goto err;
-        else
-            file_backed_destroy(page);
+        spt_remove_page(&curr->spt, page);
     }
 
 err:
