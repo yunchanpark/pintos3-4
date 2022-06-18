@@ -246,7 +246,7 @@ vm_claim_page (void *va UNUSED) {
         return false;
 	return vm_do_claim_page (page);
 }
-
+`
 /* Claim the PAGE and set up the mmu. */
 static bool
 vm_do_claim_page (struct page *page) {
