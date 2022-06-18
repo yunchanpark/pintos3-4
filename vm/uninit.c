@@ -53,6 +53,8 @@ uninit_initialize (struct page *page, void *kva) {
 
 	/* TODO: You may need to fix this function. */
     /*** debugging ddalgui~ ***/
+	// printf("initializer: %p\n", uninit->page_initializer);
+	// printf("init: %p\n", init);
 	return uninit->page_initializer (page, uninit->type, kva) && // type init
 		(init ? init (page, aux) : true); // lazy init
 }
