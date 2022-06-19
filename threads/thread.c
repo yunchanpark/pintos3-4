@@ -349,7 +349,6 @@ void
 thread_yield (void) {
 	struct thread *curr = thread_current ();
 	enum intr_level old_level;
-
 	ASSERT (!intr_context ());
 
 	old_level = intr_disable ();
@@ -441,7 +440,8 @@ check_curr_max_priority(void){
 	// 검증중 // 되네
 	// alarm-priority, priority-fifo/preempt 관련 변경 // checking list_empty is necessary (if not, list_front: ASSERT (!list_empty (list)); FAILS and return debug-panic)
 	if (!list_empty(&ready_list) && thread_get_priority() < list_entry(list_front(&ready_list), struct thread, elem)->priority) // empty 확인 필요없이 begin으로만 해주면 가능. empty+front는?
-		thread_yield();
+		if(!intr_context())
+			thread_yield();
 
 	//되는거
 	// alarm-priority, priority-fifo/preempt 관련 변경 
@@ -849,6 +849,10 @@ schedule (void) {
 	/* Activate the new address space. */
 	process_activate (next);
 #endif
+	// enum thread_status a = curr->status;
+	// curr->status = THREAD_RUNNING;
+	// printf("thread: %s\n", curr->name);
+	// curr->status = a;
 
 	if (curr != next) {
 		/* If the thread we switched from is dying, destroy its struct

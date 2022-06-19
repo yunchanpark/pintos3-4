@@ -16,8 +16,8 @@
 #define PAGE_SHIFT 12
 #define PAGE_SIZE (1 << PAGE_SHIFT)
 #define ONE_MB (1 << 20) // 1MB
-#define CHUNK_SIZE (20*ONE_MB)
-#define PAGE_COUNT (CHUNK_SIZE / PAGE_SIZE)
+#define CHUNK_SIZE (20*ONE_MB) // 2^10 * 5
+#define PAGE_COUNT (CHUNK_SIZE / PAGE_SIZE) // 5120
 
 static char big_chunks[CHUNK_SIZE];
 
@@ -27,13 +27,15 @@ test_main (void)
 	size_t i;
     void* pa;
     char *mem;
-
     for (i = 0 ; i < PAGE_COUNT ; i++) {
         if(!(i % 512))
             msg ("write sparsely over page %zu", i);
         mem = (big_chunks+(i*PAGE_SIZE));
         *mem = (char)i;
     }
+    // msg ("write sparsely over page %zu", i);
+
+    // msg("__debug : inininin\n");
 
     for (i = 0 ; i < PAGE_COUNT ; i++) {
         mem = (big_chunks+(i*PAGE_SIZE));

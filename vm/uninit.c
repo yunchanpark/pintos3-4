@@ -45,6 +45,7 @@ uninit_new (struct page *page, void *va, vm_initializer *init,
 /* Initalize the page on first fault */
 static bool
 uninit_initialize (struct page *page, void *kva) {
+    // printf("__debug :: start from... : %p\n", page->va);
 	struct uninit_page *uninit = &page->uninit;
 
 	/* Fetch first, page_initialize may overwrite the values */

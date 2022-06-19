@@ -19,7 +19,10 @@ vm_init (void) {
 	register_inspect_intr ();
 	/* DO NOT MODIFY UPPER LINES. */
 	/* TODO: Your code goes here. */
+    /* team 7 */
     list_init(&frame_list);
+    keep = list_head(&frame_list);
+    lock_init(&frame_lock);
 }
 
 /*** team 7 : for hash ***/
@@ -143,10 +146,67 @@ spt_remove_page (struct supplemental_page_table *spt, struct page *page) {
 /* Get the struct frame, that will be evicted. */
 static struct frame *
 vm_get_victim (void) {
-	struct frame *victim = NULL;
-	 /* TODO: The policy for eviction is up to you. */
+	// struct frame *victim = list_entry(list_pop_front(&frame_list), struct frame, f_elem);
+    // return victim ? victim : NULL;
 
-	return victim;
+
+	struct frame *victim;
+    struct thread *curr = thread_current();
+    /* 1안 */
+    struct list_elem *start = keep; // 두번째 for문의 종료 기준점을 주기위해 설정.  keep~ 리스트 끝 + 리스트 끝 ~ keep(==start)
+    /* keep 을 가지고 돌려야, 가장 마지막으로 돌린 친구가 계속 keep에 저장됨 */
+    if (keep == list_head(&frame_list)) {
+        keep = list_next(keep);
+    }
+    for(keep; keep != list_end(&frame_list); keep = list_next(keep)){
+        victim = list_entry(keep, struct frame, f_elem);
+        /* 최근 사용된 적이 없다면 축출*/
+        if (!pml4_is_accessed(curr->pml4, victim->page->va)) {
+            keep = list_next(keep);
+            return victim;
+        }
+        /* 아니라면 accessed bit 를 0으로 설정 후 다음친구 탐색 */
+        else
+            pml4_set_accessed(curr->pml4, victim->page->va, 0);
+    }
+
+    for(keep = list_begin(&frame_list); keep != start; keep = list_next(keep)){
+        victim = list_entry(keep, struct frame, f_elem);
+        /* 최근 사용된 적이 없다면 축출*/
+        if (!pml4_is_accessed(curr->pml4, victim->page->va)) {
+            keep = list_next(keep);
+            return victim;
+        }
+        /* 아니라면 accessed bit 를 0으로 설정 후 다음친구 탐색 */
+        else
+            pml4_set_accessed(curr->pml4, victim->page->va, 0);
+    }
+    return NULL;
+
+
+    // /* 2안 */
+    // struct list_elem *e;
+    // for(e=list_begin(&frame_list); e!=list_end(&frame_list); e=list_next(e)){
+    //     victim = list_entry(keep, struct frame, f_elem);
+    //     /* 최근 사용된 적이 없다면 축출*/
+    //     if (!pml4_is_accessed(curr->pml4, victim->page->va))
+    //         return victim;
+    //     /* 아니라면 accessed bit 를 0으로 설정 후 다음친구 탐색 */
+    //     else
+    //         pml4_set_accessed(curr->pml4, victim->page->va, 0);
+    // }
+    // // return NULL;
+    
+    // struct list_elem *ref;
+	// struct frame *victim;
+    // for (ref = list_begin(&frame_list); ref != list_tail(&frame_list); ref = list_next(ref)) {
+    //     victim = list_entry(ref, struct frame, f_elem);
+    //     // if (!pml4_is_accessed(&thread_current()->pml4, victim->page->va))
+    //     //     return victim;
+    //     if (VM_MARKER(victim->page->operations->type) == VM_MARKER_0)
+    //         return victim;
+    // }
+	// return victim;
 }
 
 /* Evict one page and return the corresponding frame.
@@ -154,9 +214,7 @@ vm_get_victim (void) {
 static struct frame *
 vm_evict_frame (void) {
 	struct frame *victim UNUSED = vm_get_victim ();
-	/* TODO: swap out the victim and return the evicted frame. */
-
-	return NULL;
+	return swap_out(victim->page) ? victim : NULL;
 }
 
 /* palloc() and get frame. If there is no available page, evict the page
@@ -166,20 +224,24 @@ vm_evict_frame (void) {
 /*** team 7 ***/
 static struct frame *
 vm_get_frame (void) {
-	struct frame *frame = calloc(1, sizeof(struct frame));
-	ASSERT (frame != NULL);
-
-    void *temp = palloc_get_page(PAL_ZERO | PAL_USER);
+    struct frame *frame = calloc(1, sizeof(struct frame));;
+    void *temp = palloc_get_page(PAL_ZERO | PAL_USER); // new addr
     
     if(!temp) {
-        PANIC("todo"); // implement later
+        struct frame *del = vm_evict_frame();
+        ASSERT(del != NULL);
+        del->page->frame = NULL;
+        free(del);
+        temp = palloc_get_page(PAL_ZERO | PAL_USER);
     }
 
     frame->kva = temp;
+    ASSERT (frame->kva);
+    lock_acquire(&frame_lock);
     list_push_front(&frame_list, &frame->f_elem);
+    lock_release(&frame_lock);
 
-	ASSERT (frame->page == NULL);
-	return frame;
+    return frame;
 }
 
 /* Growing the stack. */
@@ -200,30 +262,23 @@ vm_handle_wp (struct page *page UNUSED) {
 bool
 vm_try_handle_fault (struct intr_frame *f UNUSED, void *addr UNUSED,
 		bool user UNUSED, bool write UNUSED, bool not_present UNUSED) {
+    // printf("fault: %p\n", addr);
     if(!not_present) exit(-1);
 	struct page *page = NULL;
     struct thread *curr = thread_current();
 	struct supplemental_page_table *spt UNUSED = &curr->spt;
     void *s_rsp = (void *)(user ? f->rsp : curr->vm_rsp);
-    // printf("=====================\n");
-    // printf("s_rsp: %p\n", s_rsp);
-    // printf("addr: %p\n", addr);
-    // printf("alloc - range: %p", (pg_round_down(addr) + PGSIZE));
-    // printf(" ~ %p\n", pg_round_down(addr));
-    // printf("curr_rsp: %p\n", curr->vm_rsp);
-    // printf("user: %d\n", user);
-    // printf("write: %d\n", write);
-    // printf("not_present: %d\n", not_present);
+    // printf("__debug : page fault handler\n");
 
     /* stack growth page fault check */
     if (s_rsp - addr == 0x8 ||((void *)USER_STACK > addr) &&  (addr > s_rsp)) {
-        // printf("들어왔니??");
         vm_stack_growth(addr);
     }
     /* case : lazy load page fault */
     page = spt_find_page(spt, addr); /* 변경 */
     // printf("page: %p\n", page);
     // printf("=====================\n");
+    // printf("__debug : type : %d\n", VM_TYPE(page->operations->type));
     return page == NULL ? false :vm_do_claim_page (page);
 }
 
@@ -251,11 +306,14 @@ vm_claim_page (void *va UNUSED) {
 static bool
 vm_do_claim_page (struct page *page) {
 	struct frame *frame = vm_get_frame ();
-
+    
+    if (!frame) {
+        printf("__debug : do claim fail?\n");
+        return false;
+    }
 	/* Set links */
 	frame->page = page;
 	page->frame = frame;
-
 	/* TODO: Insert page table entry to map page's VA to frame's PA. */
     /* from install_page */
     struct thread *t = thread_current ();
