@@ -440,7 +440,8 @@ check_curr_max_priority(void){
 	// 검증중 // 되네
 	// alarm-priority, priority-fifo/preempt 관련 변경 // checking list_empty is necessary (if not, list_front: ASSERT (!list_empty (list)); FAILS and return debug-panic)
 	if (!list_empty(&ready_list) && thread_get_priority() < list_entry(list_front(&ready_list), struct thread, elem)->priority) // empty 확인 필요없이 begin으로만 해주면 가능. empty+front는?
-		thread_yield();
+		if(!intr_context())
+			thread_yield();
 
 	//되는거
 	// alarm-priority, priority-fifo/preempt 관련 변경 
