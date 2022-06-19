@@ -11,6 +11,7 @@
 #include <syscall.h>
 #include "tests/lib.h"
 #include "tests/main.h"
+#include <stdio.h>
 
 
 #define PAGE_SHIFT 12
@@ -38,7 +39,10 @@ test_main (void)
 
     for (i = 0 ; i < PAGE_COUNT ; i++) {
         mem = (big_chunks+(i*PAGE_SIZE));
+        printf("%c, %c",(char)i,*mem);
         if((char)i != *mem) {
+            printf("\n\nFAIL here: %c, %c\n", (char)i, *mem);
+            printf("%zu\n",i);
 		    fail ("data is inconsistent");
         }
         if(!(i % 512))

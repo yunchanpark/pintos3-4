@@ -3,6 +3,7 @@
 #include "vm/vm.h"
 #include "devices/disk.h"
 #include <stdio.h>
+#include "filesys/inode.h"
 
 /* DO NOT MODIFY BELOW LINE */
 static struct disk *swap_disk;
@@ -25,9 +26,10 @@ void
 vm_anon_init (void) {
 	/* TODO: Set up the swap_disk. */
 	swap_disk = disk_get(1, 1); // slot cnt = 1024 (4MB)
-    swap_disk_size = disk_size(swap_disk);
-    printf("__debug : size : %d\n", swap_disk_size);
-    swap_table.swap_bit = bitmap_create(swap_disk_size / 8);
+    swap_disk_size = disk_size(swap_disk); 
+    // printf("__debug : size : %d\n", swap_disk_size);
+    // disk_size는 섹터 단위로 크기를 내어줌. 따라서 disk_size / 8 을 해야, 페이지 단위로 비트맵 구성가능
+    swap_table.swap_bit = bitmap_create(swap_disk_size / (PGSIZE / DISK_SECTOR_SIZE));
     lock_init(&swap_table.swap_lock);
 }
 
@@ -37,7 +39,7 @@ anon_initializer (struct page *page, enum vm_type type, void *kva) {
 	/* Set up the handler */
 	page->operations = &anon_ops;
 	struct anon_page *anon_page = &page->anon;
-	anon_page->swap_slot= 0; 
+	
     return true;
 }
 
@@ -47,16 +49,16 @@ static bool
 anon_swap_in (struct page *page, void *kva) {
     printf("__debug : 5\n");
 	struct anon_page *anon_page = &page->anon;
-    
-    disk_sector_t idx = anon_page->swap_slot;
+    /* 변경사항: dick_sector_t -> int. 자료형이 비트맵꺼니까 int 필드인데, 디스크꺼인 dick_sector_t로 되어있었음 ! */
+    int idx = anon_page->swap_slot;
 
-    for (int i = 0; i < 8; i++) {
-        disk_read(swap_disk, idx + i, kva + (DISK_SECTOR_SIZE * i));
+    for (int i = 0; i < 8; ++i) {
+        disk_read(swap_disk, idx*8 + i, kva + (DISK_SECTOR_SIZE * i));
         printf("__debug : 2\n");
     }
 
     lock_acquire(&swap_table.swap_lock);
-    bitmap_reset(swap_table.swap_bit, idx / 8); // set idx to false
+    bitmap_reset(swap_table.swap_bit, idx); // set idx to false
     lock_release(&swap_table.swap_lock);
     printf("__debug : 6\n");
 
@@ -68,33 +70,45 @@ static bool
 anon_swap_out (struct page *page) {
 	struct anon_page *anon_page = &page->anon;
     // printf("__debug :: swap_out_addr : %p\n", page->va);
+    /* 변경사항: PANIC 대신 하나로 합침*/
     // 1. 
-    if (bitmap_all(swap_table.swap_bit, 0, swap_disk_size / 8))
-        PANIC("Swap disk unavailable!");
+    // if (bitmap_all(swap_table.swap_bit, 0, swap_disk_size / 8))
+    //     PANIC("Swap disk unavailable!");
 
     // 2. 
+    /* 변경사항: bitmap_scan_and_flip -> bitmap_scan */ 
     lock_acquire(&swap_table.swap_lock);
-    disk_sector_t idx = bitmap_scan_and_flip(swap_table.swap_bit, 0, 1, false);
+    // disk_sector_t -> int
+    /* disk_sector_t idx = bitmap_scan_and_flip(swap_table.swap_bit, 0, 1, false);  */
+    
+    int idx = bitmap_scan(swap_table.swap_bit, 0,1,false);
+
     if (idx == BITMAP_ERROR)
         return false;
     lock_release(&swap_table.swap_lock);
-    page->anon.swap_slot = idx * 8;
+    // page->anon.swap_slot = idx;
     // printf("__debug : 1 : idx : %d\n", idx);
 
     // 3.
-    idx = idx * 8;
-    for (int i = 0; i < 8; i++) {
-        disk_write(swap_disk, idx + i, page->frame->kva + (DISK_SECTOR_SIZE * i));
+    /* 변경사항: page->frame->kva 대신 page->va*/
+    /* idx * 8을 FOR문 내에서 사용. 왜냐하면, 비트맵에선 그대로 idx 써야함. 이게 주요했을듯 */
+    for (int i = 0; i < 8; ++i) {
+        disk_write(swap_disk, idx*8 + i, page->va + (DISK_SECTOR_SIZE * i));
         // printf("__debug : 2 : addr : %p\n", page->frame->kva + (DISK_SECTOR_SIZE * i));
     }
 
-
     // 4. 
-    pml4_clear_page(&thread_current()->pml4, page->va);
+    /* 변경사항: & 삭제 */
+    pml4_clear_page(thread_current()->pml4, page->va);
     // printf("__debug : 3\n");
 
-    // 5. 
-    palloc_free_page(page->frame->kva);
+    /* 변경사항: anon_page의 스왑슬롯에 해당 bitmap 인덱스 추가 */
+    bitmap_mark(swap_table.swap_bit, idx);
+    anon_page->swap_slot = idx;
+    
+    // 5.
+    /* 변경사항: palloc 삭제 */ 
+    // palloc_free_page(page->frame->kva);
     // printf("__debug : 4\n");
 
     // // 5. 
@@ -111,8 +125,8 @@ anon_swap_out (struct page *page) {
 static void
 anon_destroy (struct page *page) {
 	struct anon_page *anon_page = &page->anon;
-    lock_acquire(&frame_lock);
-    list_remove(&page->frame->f_elem);
-    free(page->frame);
-    lock_release(&frame_lock);
+    // lock_acquire(&frame_lock);
+    // list_remove(&page->frame->f_elem);
+    // free(page->frame);
+    // lock_release(&frame_lock);
 }

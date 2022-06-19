@@ -21,6 +21,7 @@ vm_init (void) {
 	/* TODO: Your code goes here. */
     /* team 7 */
     list_init(&frame_list);
+    keep = list_begin(&frame_list);
     lock_init(&frame_lock);
 }
 
@@ -143,11 +144,46 @@ spt_remove_page (struct supplemental_page_table *spt, struct page *page) {
 }
 
 /* Get the struct frame, that will be evicted. */
+/* 변경사항: 최근에 썼던 지점부터 쓰도록 eviction policy 추가 */
 static struct frame *
 vm_get_victim (void) {
+    printf("\nget victim start \n");
+    struct thread *curr = thread_current();
 	struct frame *victim = list_entry(list_pop_front(&frame_list), struct frame, f_elem);
-    if (victim)
-	    return victim;
+    return victim;
+    // /* 1안 */
+    // // struct list_elem *start = keep; // 두번째 for문의 종료 기준점을 주기위해 설정.  keep~ 리스트 끝 + 리스트 끝 ~ keep(==start)
+    // // /* keep 을 가지고 돌려야, 가장 마지막으로 돌린 친구가 계속 keep에 저장됨 */
+    // // for(keep = start; keep != list_end(&frame_list); keep = list_next(keep)){
+    // //     victim = list_entry(keep, struct frame, f_elem);
+    // //     /* 최근 사용된 적이 없다면 축출*/
+    // //     if (!pml4_is_accessed(curr->pml4, victim->page->va))
+    // //         return victim;
+    // //     /* 아니라면 accessed bit 를 0으로 설정 후 다음친구 탐색 */
+    // //     else
+    // //         pml4_set_accessed(curr->pml4, victim->page->va, 0);
+    // // }
+    // // for(keep = list_begin(&frame_list); keep != start; keep = list_next(keep)){
+    // //     victim = list_entry(keep, struct frame, f_elem);
+    // //     /* 최근 사용된 적이 없다면 축출*/
+    // //     if (!pml4_is_accessed(curr->pml4, victim->page->va))
+    // //         return victim;
+    // //     /* 아니라면 accessed bit 를 0으로 설정 후 다음친구 탐색 */
+    // //     else
+    // //         pml4_set_accessed(curr->pml4, victim->page->va, 0);
+    // // }
+
+    // /* 2안 */
+    // struct list_elem *e;
+    // for(e=list_begin(&frame_list); e!=list_end(&frame_list); e=list_next(e)){
+    //     victim = list_entry(keep, struct frame, f_elem);
+    //     /* 최근 사용된 적이 없다면 축출*/
+    //     if (!pml4_is_accessed(curr->pml4, victim->page->va))
+    //         return victim;
+    //     /* 아니라면 accessed bit 를 0으로 설정 후 다음친구 탐색 */
+    //     else
+    //         pml4_set_accessed(curr->pml4, victim->page->va, 0);
+    // }
     return NULL;
     // printf("__debug : get victim\n");
     // struct list_elem *ref;
@@ -166,10 +202,13 @@ vm_get_victim (void) {
  * Return NULL on error.*/
 static struct frame *
 vm_evict_frame (void) {
+    printf("\nbefore get victim\n");
 	struct frame *victim UNUSED = vm_get_victim ();
-
-	if (!swap_out(victim->page))
+    printf("\nbefore swap out \n");
+	if (!swap_out(victim->page)){
+        printf("\nafter swap out failed\n");
         return NULL;
+    }
 
 	return victim;
 }
@@ -184,27 +223,29 @@ vm_get_frame (void) {
     void *temp = palloc_get_page(PAL_ZERO | PAL_USER); // new addr
     struct frame *frame;
     
+    /* 변경사항: 가지고 온 frame 그대로 쓰도록 함.*/
     if(!temp) {
-        // printf("__debug : no userpool\n");
-        struct frame *del = vm_evict_frame();
-        if (!del) goto err;
-        free(del);
-
-        frame = calloc(1, sizeof(struct frame)); 
-        frame->kva = palloc_get_page(PAL_ZERO | PAL_USER);
+        printf("__debug : no userpool\n");
+        struct frame *reuse = vm_evict_frame();
+        if (!reuse){ 
+            printf("\neviction failed\n");
+            goto err;
+        }
+        reuse->page = NULL;
+        printf("\nframe found\n");
+        return reuse;
     }
     else {
-	    frame = calloc(1, sizeof(struct frame));
+	    frame = (struct frame *)calloc(1, sizeof(struct frame));
         frame->kva = temp;
     }
-
-    ASSERT (frame->kva);
     lock_acquire(&frame_lock);
-    list_push_front(&frame_list, &frame->f_elem);
+    /* push back */
+    list_push_back(&frame_list, &frame->f_elem);
+    frame->page = NULL;
     lock_release(&frame_lock);
 
     return frame;
-
 err : 
     return NULL; 
 }
@@ -242,7 +283,7 @@ vm_try_handle_fault (struct intr_frame *f UNUSED, void *addr UNUSED,
     page = spt_find_page(spt, addr); /* 변경 */
     // printf("page: %p\n", page);
     // printf("=====================\n");
-    printf("__debug : type : %d\n", VM_TYPE(page->operations->type));
+    // printf("__debug : type : %d\n", VM_TYPE(page->operations->type));
     return page == NULL ? false :vm_do_claim_page (page);
 }
 

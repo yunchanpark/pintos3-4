@@ -74,6 +74,8 @@ struct page {
 /* The representation of "frame" */
 /*** team 7 ***/
 struct list frame_list; /* initialized at vm_init */
+/* 변경사항: eviction.*/
+struct list_elem *keep;
 
 struct frame {
 	void *kva;
