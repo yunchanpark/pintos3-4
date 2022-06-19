@@ -146,20 +146,7 @@ spt_remove_page (struct supplemental_page_table *spt, struct page *page) {
 static struct frame *
 vm_get_victim (void) {
 	struct frame *victim = list_entry(list_pop_front(&frame_list), struct frame, f_elem);
-    if (victim)
-	    return victim;
-    return NULL;
-    // printf("__debug : get victim\n");
-    // struct list_elem *ref;
-	// struct frame *victim;
-    // for (ref = list_begin(&frame_list); ref != list_tail(&frame_list); ref = list_next(ref)) {
-    //     victim = list_entry(ref, struct frame, f_elem);
-    //     // if (!pml4_is_accessed(&thread_current()->pml4, victim->page->va))
-    //     //     return victim;
-    //     if (VM_MARKER(victim->page->operations->type) == VM_MARKER_0)
-    //         return victim;
-    // }
-	// return victim;
+    return victim ? victim : NULL;
 }
 
 /* Evict one page and return the corresponding frame.
@@ -167,11 +154,7 @@ vm_get_victim (void) {
 static struct frame *
 vm_evict_frame (void) {
 	struct frame *victim UNUSED = vm_get_victim ();
-
-	if (!swap_out(victim->page))
-        return NULL;
-
-	return victim;
+	return swap_out(victim->page) ? victim : NULL;
 }
 
 /* palloc() and get frame. If there is no available page, evict the page
@@ -181,32 +164,24 @@ vm_evict_frame (void) {
 /*** team 7 ***/
 static struct frame *
 vm_get_frame (void) {
+    struct frame *frame = calloc(1, sizeof(struct frame));;
     void *temp = palloc_get_page(PAL_ZERO | PAL_USER); // new addr
-    struct frame *frame;
     
     if(!temp) {
-        // printf("__debug : no userpool\n");
         struct frame *del = vm_evict_frame();
-        if (!del) goto err;
+        ASSERT(del != NULL);
+        del->page->frame = NULL;
         free(del);
-
-        frame = calloc(1, sizeof(struct frame)); 
-        frame->kva = palloc_get_page(PAL_ZERO | PAL_USER);
-    }
-    else {
-	    frame = calloc(1, sizeof(struct frame));
-        frame->kva = temp;
+        temp = palloc_get_page(PAL_ZERO | PAL_USER);
     }
 
+    frame->kva = temp;
     ASSERT (frame->kva);
     lock_acquire(&frame_lock);
     list_push_front(&frame_list, &frame->f_elem);
     lock_release(&frame_lock);
 
     return frame;
-
-err : 
-    return NULL; 
 }
 
 /* Growing the stack. */
@@ -227,6 +202,7 @@ vm_handle_wp (struct page *page UNUSED) {
 bool
 vm_try_handle_fault (struct intr_frame *f UNUSED, void *addr UNUSED,
 		bool user UNUSED, bool write UNUSED, bool not_present UNUSED) {
+    // printf("fault: %p\n", addr);
     if(!not_present) exit(-1);
 	struct page *page = NULL;
     struct thread *curr = thread_current();
@@ -242,7 +218,7 @@ vm_try_handle_fault (struct intr_frame *f UNUSED, void *addr UNUSED,
     page = spt_find_page(spt, addr); /* 변경 */
     // printf("page: %p\n", page);
     // printf("=====================\n");
-    printf("__debug : type : %d\n", VM_TYPE(page->operations->type));
+    // printf("__debug : type : %d\n", VM_TYPE(page->operations->type));
     return page == NULL ? false :vm_do_claim_page (page);
 }
 

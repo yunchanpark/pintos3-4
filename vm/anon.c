@@ -26,7 +26,7 @@ vm_anon_init (void) {
 	/* TODO: Set up the swap_disk. */
 	swap_disk = disk_get(1, 1); // slot cnt = 1024 (4MB)
     swap_disk_size = disk_size(swap_disk);
-    printf("__debug : size : %d\n", swap_disk_size);
+    // printf("__debug : size : %d\n", swap_disk_size);
     swap_table.swap_bit = bitmap_create(swap_disk_size / 8);
     lock_init(&swap_table.swap_lock);
 }
@@ -45,20 +45,17 @@ anon_initializer (struct page *page, enum vm_type type, void *kva) {
 /* Swap in the page by read contents from the swap disk. */
 static bool
 anon_swap_in (struct page *page, void *kva) {
-    printf("__debug : 5\n");
+    // printf("in: %p\n", page);
 	struct anon_page *anon_page = &page->anon;
     
     disk_sector_t idx = anon_page->swap_slot;
-
     for (int i = 0; i < 8; i++) {
-        disk_read(swap_disk, idx + i, kva + (DISK_SECTOR_SIZE * i));
-        printf("__debug : 2\n");
+        disk_read(swap_disk, (idx * 8) + i, kva + (DISK_SECTOR_SIZE * i));
     }
 
     lock_acquire(&swap_table.swap_lock);
-    bitmap_reset(swap_table.swap_bit, idx / 8); // set idx to false
+    bitmap_set_multiple(swap_table.swap_bit, idx, 1, false);
     lock_release(&swap_table.swap_lock);
-    printf("__debug : 6\n");
 
     return true;
 }
@@ -66,44 +63,27 @@ anon_swap_in (struct page *page, void *kva) {
 /* Swap out the page by writing contents to the swap disk. */
 static bool
 anon_swap_out (struct page *page) {
+    // printf("come on!");
 	struct anon_page *anon_page = &page->anon;
-    // printf("__debug :: swap_out_addr : %p\n", page->va);
-    // 1. 
-    if (bitmap_all(swap_table.swap_bit, 0, swap_disk_size / 8))
-        PANIC("Swap disk unavailable!");
 
-    // 2. 
     lock_acquire(&swap_table.swap_lock);
     disk_sector_t idx = bitmap_scan_and_flip(swap_table.swap_bit, 0, 1, false);
-    if (idx == BITMAP_ERROR)
-        return false;
     lock_release(&swap_table.swap_lock);
-    page->anon.swap_slot = idx * 8;
-    // printf("__debug : 1 : idx : %d\n", idx);
+    if (idx == BITMAP_ERROR) PANIC("Swap disk unavailable!");
+    
+    page->anon.swap_slot = idx;
 
-    // 3.
-    idx = idx * 8;
     for (int i = 0; i < 8; i++) {
-        disk_write(swap_disk, idx + i, page->frame->kva + (DISK_SECTOR_SIZE * i));
-        // printf("__debug : 2 : addr : %p\n", page->frame->kva + (DISK_SECTOR_SIZE * i));
+        disk_write(swap_disk, (idx * 8) + i, page->frame->kva + (DISK_SECTOR_SIZE * i));
     }
 
 
-    // 4. 
-    pml4_clear_page(&thread_current()->pml4, page->va);
-    // printf("__debug : 3\n");
-
-    // 5. 
+    pml4_clear_page(thread_current()->pml4, page->va);
+    lock_acquire(&frame_lock);
+    list_remove(&page->frame->f_elem);
     palloc_free_page(page->frame->kva);
-    // printf("__debug : 4\n");
+    lock_release(&frame_lock);
 
-    // // 5. 
-    // memset(page->frame->kva, 0, PGSIZE);
-    // page->frame->page = NULL;
-    // page->frame = NULL;
-    // printf("__debug : 4\n");
-
-    // printf("__debug : type : %d\n", VM_TYPE(page->operations->type));
     return true;
 }
 
@@ -112,7 +92,9 @@ static void
 anon_destroy (struct page *page) {
 	struct anon_page *anon_page = &page->anon;
     lock_acquire(&frame_lock);
-    list_remove(&page->frame->f_elem);
-    free(page->frame);
+    if (page->frame != NULL) {
+        list_remove(&page->frame->f_elem);
+        free(page->frame);
+    }
     lock_release(&frame_lock);
 }

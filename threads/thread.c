@@ -349,7 +349,6 @@ void
 thread_yield (void) {
 	struct thread *curr = thread_current ();
 	enum intr_level old_level;
-
 	ASSERT (!intr_context ());
 
 	old_level = intr_disable ();
@@ -849,6 +848,10 @@ schedule (void) {
 	/* Activate the new address space. */
 	process_activate (next);
 #endif
+	// enum thread_status a = curr->status;
+	// curr->status = THREAD_RUNNING;
+	// printf("thread: %s\n", curr->name);
+	// curr->status = a;
 
 	if (curr != next) {
 		/* If the thread we switched from is dying, destroy its struct
