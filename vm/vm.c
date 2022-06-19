@@ -155,10 +155,8 @@ vm_get_victim (void) {
     /* 1안 */
     struct list_elem *start = keep; // 두번째 for문의 종료 기준점을 주기위해 설정.  keep~ 리스트 끝 + 리스트 끝 ~ keep(==start)
     /* keep 을 가지고 돌려야, 가장 마지막으로 돌린 친구가 계속 keep에 저장됨 */
-    if (keep == list_head(&frame_list)) {
-        keep = list_next(keep);
-    }
-    for(keep; keep != list_end(&frame_list); keep = list_next(keep)){
+
+    for(keep = list_next(keep); keep != list_end(&frame_list); keep = list_next(keep)){
         victim = list_entry(keep, struct frame, f_elem);
         /* 최근 사용된 적이 없다면 축출*/
         if (!pml4_is_accessed(curr->pml4, victim->page->va)) {
@@ -332,74 +330,6 @@ supplemental_page_table_init (struct supplemental_page_table *spt UNUSED) {
     spt->spt_hash = (struct hash *)calloc(1, sizeof(struct hash));
     hash_init(spt->spt_hash, page_hash, page_less, NULL);
 }
-
-/* Copy supplemental page table from src to dst */
-/* team 7 : hyeRexx */
-// bool
-// supplemental_page_table_copy (struct supplemental_page_table *dst UNUSED,
-// 		struct supplemental_page_table *src UNUSED) {
-//     struct hash_iterator i;
-
-//     hash_first (&i, src->spt_hash);
-//     while (hash_next (&i)) // iterate src
-//     {      
-//         // 1. iterate src spt and get ref page
-//         struct page *src_p = hash_entry (hash_cur (&i), struct page, spt_elem);
-
-//         // 2. allocate new page at dst(current thread)
-//         //    이 단계에서 struct page 구성 자체는 완료됨 (vm_alloc + uninit_new)
-//         // bool check = vm_alloc_page(src_p->uninit.type, src_p->va, src_p->writable);
-//         // ASSERT (check != false);
-//         printf("copy-type: %d\n", page_get_type(src_p));
-        
-//         bool check = vm_alloc_page_with_initializer(src_p->uninit.type, src_p->va, src_p->writable, src_p->uninit.page_initializer, src_p->uninit.aux);
-//         // if (!check) 
-//         //     goto err;
-//         struct page *dst_p1 = spt_find_page(dst, src_p->va);
-//         // ASSERT (dst_p != NULL);
-//         if (!dst_p1)
-//             goto err;
-//         dst_p1->frame->kva = dst_p2->frame->kva;
-//         dst_p1->file = dst_p2->file;
-//         dst_p1->uninit.aux = dst_p2->uninit.aux;
-        
-//         bool check = vm_do_claim_page(dst_p1);
-//         if (!check) 
-//             goto err;
-            
-//         // 3. get new page : find page from dst spt (vm alloc returns bool type)
-//         //    다음 작업을 위해서 새로 만든 페이지를 꺼내어 놓음
-
-//         // 4. virtual - physical mapping (dst)
-//         // check = vm_do_claim_page(dst_p);
-//         struct page *dst_p2 = calloc(1, sizeof(struct page));
-//         // 5. get src page's content
-//         switch(VM_TYPE(src_p->operations->type)) {
-//             case VM_ANON :
-//                 memcpy(dst_p2->frame->kva, src_p->frame->kva, PGSIZE);
-//                 if(vm_alloc_page_with_initializer(VM_ANON | VM_MARKER_0, src_p->va, src_p->writable, src_p->uninit.page_initializer, src_p->uninit.aux))
-//                     goto err;
-//                 break;
-            
-//             case VM_FILE :
-//                 memcpy(dst_p2->frame->kva, src_p->frame->kva, PGSIZE);
-//                 memcpy(&dst_p2->file, &src_p->file, PGSIZE);
-//                 if(vm_alloc_page_with_initializer(src_p->uninit.type, src_p->va, src_p->writable, src_p->uninit.page_initializer, src_p->uninit.aux))
-//                     goto err;
-//                 break;
-            
-//             /**/
-//             case VM_UNINIT :
-//                 memcpy(dst_p2->uninit.aux, src_p->uninit.aux, sizeof(src_p->uninit.aux));
-//                 break;
-//         }
-        
-//     }
-//     return true;
-
-// err :
-//     return false;
-// }
 
 /* Free the resource hold by the supplemental page table */
 void
