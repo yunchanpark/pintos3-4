@@ -163,7 +163,15 @@ __do_fork (void *aux) {
 
 	/* 1. Read the cpu context to local stack. */
 	memcpy (&if_, parent_if, sizeof (struct intr_frame));
-
+	// printf("parent_if: %p\n", parent_if);
+	// printf("p_r15: %p\n", &parent_if->R.r15);
+	// printf("p_r14: %p\n", parent_if->R.r14);
+	// printf("p_r13: %p\n", parent_if->R.r13);
+	// printf("p_r12: %p\n", parent_if->R.r12);
+	// printf("p_r11: %p\n", parent_if->R.r11);
+	// printf("p_r10: %p\n", parent_if->R.r10);
+	// printf("p_r9: %p\n", parent_if->R.r9);
+	// printf("p_r8: %p\n", parent_if->R.r8);
 	/* 2. Duplicate PT */
 	current->pml4 = pml4_create();
 	if (current->pml4 == NULL)
@@ -234,8 +242,10 @@ __do_fork (void *aux) {
 	// process_init ();
 
 	/* Finally, switch to the newly created process. */
-	if (succ)
+	if (succ){
+		// printf("===========\n");
 		do_iret (&if_);
+	}
 error:
 	current->exit_status = TID_ERROR; // 없어도될듯? 실험
 	sema_up(&current->fork_sema);
