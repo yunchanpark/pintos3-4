@@ -52,7 +52,9 @@ file_backed_swap_in (struct page *page, void *kva) {
         lock_release(&file_lock);
     }
     
+    lock_acquire(&file_lock);
     file_read_at(file, kva, file_page->page_read_bytes, file_page->ofs);
+    lock_release(&file_lock);
     *file_page->page_cnt++;
     return true;
 }
@@ -63,7 +65,9 @@ file_backed_swap_out (struct page *page) {
 	struct file_page *file_page UNUSED = &page->file;
     struct thread *curr = thread_current();
     if (pml4_is_dirty(curr->pml4, page->va)) {
+        lock_acquire(&file_lock);
         file_write_at(file_page->re_file, page->frame->kva, file_page->page_read_bytes, file_page->ofs);
+        lock_release(&file_lock);
         pml4_set_dirty(curr->pml4, page->frame->kva, false);
     }
     

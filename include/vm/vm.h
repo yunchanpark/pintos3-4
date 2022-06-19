@@ -108,7 +108,7 @@ struct supplemental_page_table {
 };
 
 struct lock frame_lock;
-
+struct list_elem *keep;
 
 #include "threads/thread.h"
 void supplemental_page_table_init (struct supplemental_page_table *spt);
