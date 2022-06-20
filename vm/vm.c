@@ -144,69 +144,48 @@ spt_remove_page (struct supplemental_page_table *spt, struct page *page) {
 }
 
 /* Get the struct frame, that will be evicted. */
+/* eviction policy : clock algorithm 
+ * 1. 마지막 탐색 지점을 저장할 keep을 전역으로 선언해 참조한다
+ * 2. keep에 저장된 위치부터 list의 끝, list의 시작부터 keep까지 탐색한다. (ring)
+ * 3. 만약 참조 위치의 access bit이 0이라면 victim으로 정한다. keep은 victim의 next로 옮긴다.
+ * 4. 만약 참조 위치의 access bit이 1이라면 bit을 0으로 바꾸고 계속 탐색을 진행한다.
+ * 5. 이 알고리즘은 오래된 프레임의 참조 가능성이 낮다고 전제한다. (FIFO) */
 static struct frame *
 vm_get_victim (void) {
-	// struct frame *victim = list_entry(list_pop_front(&frame_list), struct frame, f_elem);
-    // return victim ? victim : NULL;
-
-
 	struct frame *victim;
     struct thread *curr = thread_current();
-    /* 1안 */
-    struct list_elem *start = keep; // 두번째 for문의 종료 기준점을 주기위해 설정.  keep~ 리스트 끝 + 리스트 끝 ~ keep(==start)
-    /* keep 을 가지고 돌려야, 가장 마지막으로 돌린 친구가 계속 keep에 저장됨 */
+    struct list_elem *clock_point = keep; // 탐색 분기점 설정
+
+    // keep이 list의 head인 것에 대비 (head에서 참조할 상위 struct는 frame이 아님)
+    // 탐색 1 : keep -> end
     if (keep == list_head(&frame_list)) {
         keep = list_next(keep);
     }
     for(keep; keep != list_end(&frame_list); keep = list_next(keep)){
+    // for (keep == list_head(&frame_list) ? list_next(keep) : keep; keep != list_end(&frame_list); keep = list_next(keep)) {
         victim = list_entry(keep, struct frame, f_elem);
-        /* 최근 사용된 적이 없다면 축출*/
+        
         if (!pml4_is_accessed(curr->pml4, victim->page->va)) {
             keep = list_next(keep);
             return victim;
         }
-        /* 아니라면 accessed bit 를 0으로 설정 후 다음친구 탐색 */
-        else
+        else {
             pml4_set_accessed(curr->pml4, victim->page->va, 0);
+        }
     }
 
-    for(keep = list_begin(&frame_list); keep != start; keep = list_next(keep)){
+    // 탐색 2 : begin -> prev(keep)
+    for (keep = list_begin(&frame_list); keep != clock_point; keep = list_next(keep)) {
         victim = list_entry(keep, struct frame, f_elem);
-        /* 최근 사용된 적이 없다면 축출*/
+
         if (!pml4_is_accessed(curr->pml4, victim->page->va)) {
             keep = list_next(keep);
             return victim;
         }
-        /* 아니라면 accessed bit 를 0으로 설정 후 다음친구 탐색 */
-        else
-            pml4_set_accessed(curr->pml4, victim->page->va, 0);
+        else {
+            pml4_set_accessed(curr->pml4, victim->page->va, 0); }
     }
     return NULL;
-
-
-    // /* 2안 */
-    // struct list_elem *e;
-    // for(e=list_begin(&frame_list); e!=list_end(&frame_list); e=list_next(e)){
-    //     victim = list_entry(keep, struct frame, f_elem);
-    //     /* 최근 사용된 적이 없다면 축출*/
-    //     if (!pml4_is_accessed(curr->pml4, victim->page->va))
-    //         return victim;
-    //     /* 아니라면 accessed bit 를 0으로 설정 후 다음친구 탐색 */
-    //     else
-    //         pml4_set_accessed(curr->pml4, victim->page->va, 0);
-    // }
-    // // return NULL;
-    
-    // struct list_elem *ref;
-	// struct frame *victim;
-    // for (ref = list_begin(&frame_list); ref != list_tail(&frame_list); ref = list_next(ref)) {
-    //     victim = list_entry(ref, struct frame, f_elem);
-    //     // if (!pml4_is_accessed(&thread_current()->pml4, victim->page->va))
-    //     //     return victim;
-    //     if (VM_MARKER(victim->page->operations->type) == VM_MARKER_0)
-    //         return victim;
-    // }
-	// return victim;
 }
 
 /* Evict one page and return the corresponding frame.
@@ -218,21 +197,26 @@ vm_evict_frame (void) {
 }
 
 /* palloc() and get frame. If there is no available page, evict the page
- * and return it. This always return valid address. That is, if the user pool
+ * and return it. This alw`ays return valid address. That is, if the user pool
  * memory is full, this function evicts the frame to get the available memory
  * space.*/
-/*** team 7 ***/
 static struct frame *
 vm_get_frame (void) {
-    struct frame *frame = calloc(1, sizeof(struct frame));;
+    struct frame *frame = calloc(1, sizeof(struct frame));
     void *temp = palloc_get_page(PAL_ZERO | PAL_USER); // new addr
     
+    /* swap out and get a page (retry) */
     if(!temp) {
+        // evict
         struct frame *del = vm_evict_frame();
-        ASSERT(del != NULL);
+        ASSERT(del != NULL); // swap slot이 꽉 찬 경우는 kernel panic으로, 이 단계에서는 고려하지 않음
         del->page->frame = NULL;
         free(del);
-        temp = palloc_get_page(PAL_ZERO | PAL_USER);
+
+        // 재할당
+        temp = palloc_get_page(PAL_ZERO | PAL_USER); 
+        // printf("__debug : get?\n");
+        // ASSERT (temp != NULL)
     }
 
     frame->kva = temp;
@@ -248,38 +232,39 @@ vm_get_frame (void) {
 static void
 vm_stack_growth (void *addr UNUSED) {
     void *pg_down_addr = pg_round_down(addr);
-    if (pg_down_addr >= (void *)(USER_STACK  - (1 << 20))) {
-        vm_alloc_page(VM_MARKER_0 | VM_ANON, pg_down_addr, 1);
-    }
+    if (pg_down_addr >= (void *)(USER_STACK  - (1 << 20)))
+        vm_alloc_page(VM_MARKER_0 | VM_ANON, pg_down_addr, 1); // stack은 lazy load하지 않음
 }
 
 /* Handle the fault on write_protected page */
 static bool
 vm_handle_wp (struct page *page UNUSED) {
+    /* extra */
 }
 
 /* Return true on success */
+/* check cases : stack growth, lazy load */
 bool
 vm_try_handle_fault (struct intr_frame *f UNUSED, void *addr UNUSED,
 		bool user UNUSED, bool write UNUSED, bool not_present UNUSED) {
-    // printf("fault: %p\n", addr);
-    if(!not_present) exit(-1);
+
+    if(!not_present) // write to r/o
+        exit(-1);
+
 	struct page *page = NULL;
     struct thread *curr = thread_current();
 	struct supplemental_page_table *spt UNUSED = &curr->spt;
-    void *s_rsp = (void *)(user ? f->rsp : curr->vm_rsp);
-    // printf("__debug : page fault handler\n");
 
-    /* stack growth page fault check */
-    if (s_rsp - addr == 0x8 ||((void *)USER_STACK > addr) &&  (addr > s_rsp)) {
+    /* rsp check : user인 경우 if에서, kernel인 경우 TCB에서 참조 */
+    void *s_rsp = (void *)(user ? f->rsp : curr->vm_rsp);
+
+    /* page fault caused by stack */ 
+    if (s_rsp - addr == 0x8 || ((void *)USER_STACK > addr) && (addr > s_rsp))
         vm_stack_growth(addr);
-    }
-    /* case : lazy load page fault */
-    page = spt_find_page(spt, addr); /* 변경 */
-    // printf("page: %p\n", page);
-    // printf("=====================\n");
-    // printf("__debug : type : %d\n", VM_TYPE(page->operations->type));
-    return page == NULL ? false :vm_do_claim_page (page);
+
+    page = spt_find_page(spt, addr);
+
+    return page == NULL ? false : vm_do_claim_page (page);
 }
 
 /* Free the page.
@@ -291,11 +276,11 @@ vm_dealloc_page (struct page *page) {
 }
 
 /* Claim the page that allocate on VA. */
-/*** team 7 ***/
+/* get page from supplemental page table */ 
 bool
 vm_claim_page (void *va UNUSED) {
 	struct page *page = NULL;
-
+    
     page = spt_find_page(&thread_current()->spt, va);
     if (!page) 
         return false;
@@ -305,130 +290,63 @@ vm_claim_page (void *va UNUSED) {
 /* Claim the PAGE and set up the mmu. */
 static bool
 vm_do_claim_page (struct page *page) {
-	struct frame *frame = vm_get_frame ();
-    
-    if (!frame) {
-        printf("__debug : do claim fail?\n");
+	struct frame *frame = vm_get_frame (); // claim a frame
+    if (!frame) 
         return false;
-    }
+
+
 	/* Set links */
+    struct thread *t = thread_current ();
 	frame->page = page;
 	page->frame = frame;
-	/* TODO: Insert page table entry to map page's VA to frame's PA. */
-    /* from install_page */
-    struct thread *t = thread_current ();
 
 	if (pml4_get_page (t->pml4, page->va) == NULL // pml4에 upage unmapping 상태이면
-			&& pml4_set_page (t->pml4, page->va, frame->kva, page->writable)) // pml4 set 함
+			&& pml4_set_page (t->pml4, page->va, frame->kva, page->writable)) // set pte
         return swap_in (page, frame->kva);
 
     return false;
 }
 
 /* Initialize new supplemental page table */
-/*** team 7 ***/
 void
 supplemental_page_table_init (struct supplemental_page_table *spt UNUSED) {
+    /* allocate hash structure */
     spt->spt_hash = (struct hash *)calloc(1, sizeof(struct hash));
     hash_init(spt->spt_hash, page_hash, page_less, NULL);
 }
 
-/* Copy supplemental page table from src to dst */
-/* team 7 : hyeRexx */
-// bool
-// supplemental_page_table_copy (struct supplemental_page_table *dst UNUSED,
-// 		struct supplemental_page_table *src UNUSED) {
-//     struct hash_iterator i;
-
-//     hash_first (&i, src->spt_hash);
-//     while (hash_next (&i)) // iterate src
-//     {      
-//         // 1. iterate src spt and get ref page
-//         struct page *src_p = hash_entry (hash_cur (&i), struct page, spt_elem);
-
-//         // 2. allocate new page at dst(current thread)
-//         //    이 단계에서 struct page 구성 자체는 완료됨 (vm_alloc + uninit_new)
-//         // bool check = vm_alloc_page(src_p->uninit.type, src_p->va, src_p->writable);
-//         // ASSERT (check != false);
-//         printf("copy-type: %d\n", page_get_type(src_p));
-        
-//         bool check = vm_alloc_page_with_initializer(src_p->uninit.type, src_p->va, src_p->writable, src_p->uninit.page_initializer, src_p->uninit.aux);
-//         // if (!check) 
-//         //     goto err;
-//         struct page *dst_p1 = spt_find_page(dst, src_p->va);
-//         // ASSERT (dst_p != NULL);
-//         if (!dst_p1)
-//             goto err;
-//         dst_p1->frame->kva = dst_p2->frame->kva;
-//         dst_p1->file = dst_p2->file;
-//         dst_p1->uninit.aux = dst_p2->uninit.aux;
-        
-//         bool check = vm_do_claim_page(dst_p1);
-//         if (!check) 
-//             goto err;
-            
-//         // 3. get new page : find page from dst spt (vm alloc returns bool type)
-//         //    다음 작업을 위해서 새로 만든 페이지를 꺼내어 놓음
-
-//         // 4. virtual - physical mapping (dst)
-//         // check = vm_do_claim_page(dst_p);
-//         struct page *dst_p2 = calloc(1, sizeof(struct page));
-//         // 5. get src page's content
-//         switch(VM_TYPE(src_p->operations->type)) {
-//             case VM_ANON :
-//                 memcpy(dst_p2->frame->kva, src_p->frame->kva, PGSIZE);
-//                 if(vm_alloc_page_with_initializer(VM_ANON | VM_MARKER_0, src_p->va, src_p->writable, src_p->uninit.page_initializer, src_p->uninit.aux))
-//                     goto err;
-//                 break;
-            
-//             case VM_FILE :
-//                 memcpy(dst_p2->frame->kva, src_p->frame->kva, PGSIZE);
-//                 memcpy(&dst_p2->file, &src_p->file, PGSIZE);
-//                 if(vm_alloc_page_with_initializer(src_p->uninit.type, src_p->va, src_p->writable, src_p->uninit.page_initializer, src_p->uninit.aux))
-//                     goto err;
-//                 break;
-            
-//             /**/
-//             case VM_UNINIT :
-//                 memcpy(dst_p2->uninit.aux, src_p->uninit.aux, sizeof(src_p->uninit.aux));
-//                 break;
-//         }
-        
-//     }
-//     return true;
-
-// err :
-//     return false;
-// }
-
-/* Free the resource hold by the supplemental page table */
+/* Free the resource hold by the supplemental page table 
+ * Destroy all the supplemental_page_table hold by thread and
+ * writeback all the modified contents to the storage. */
 void
 supplemental_page_table_kill (struct supplemental_page_table *spt UNUSED) {
-	/* TODO: Destroy all the supplemental_page_table hold by thread and
-	 * TODO: writeback all the modified contents to the storage. */
     if (spt->spt_hash) 
-        hash_destroy(spt->spt_hash, page_destructor);
+        hash_destroy(spt->spt_hash, page_destructor); // call detroy func for each type
 }
 
+/* copy the source supplemental page table to destination */
+/* 1. set hash iterator
+ * 2. spt를 순회하면서 각 페이지 타입에 맞는 copy 과정 수행
+ * general : allocate a page through vm_alloc
+ * type anon : stack, general 확인해서 initializer 세팅, memcpy
+ * type file : aux setting, memcpy             */
 bool
 supplemental_page_table_copy (struct supplemental_page_table *dst UNUSED,
 		struct supplemental_page_table *src UNUSED) {
-    struct hash_iterator i;
-    hash_first (&i, src->spt_hash);
-    while (hash_next (&i)) {      
-        struct page *src_p = hash_entry (hash_cur (&i), struct page, spt_elem);
-        // printf("copy-type: %d\n", src_p->uninit.type);
-        // printf("copy-init: %p\n", src_p->uninit.init);
+    
+    struct hash_iterator iter;
+    hash_first (&iter, src->spt_hash);
+    while (hash_next (&iter)) {      
+        struct page *src_p = hash_entry (hash_cur (&iter), struct page, spt_elem);
         switch (src_p->operations->type) {
         case VM_ANON: {
             if(VM_MARKER(src_p->uninit.type)) {
-                if(!vm_alloc_page_with_initializer(page_get_type(src_p), src_p->va, src_p->writable, src_p->uninit.init, NULL)) {
+                if(!vm_alloc_page_with_initializer(page_get_type(src_p), src_p->va, src_p->writable, src_p->uninit.init, NULL))
                     goto err;
-                }
-            }else {
-                if(!vm_alloc_page_with_initializer(page_get_type(src_p), src_p->va, src_p->writable, NULL, NULL)) {
+        
+            } else {
+                if(!vm_alloc_page_with_initializer(page_get_type(src_p), src_p->va, src_p->writable, NULL, NULL))
                     goto err;
-                }
             }
             struct page *dst_p = spt_find_page(dst, src_p->va);
             if (dst_p == NULL)
@@ -450,13 +368,13 @@ supplemental_page_table_copy (struct supplemental_page_table *dst UNUSED,
             if(!vm_alloc_page_with_initializer(page_get_type(src_p), src_p->va, src_p->writable, lazy_load_file, lazy_file)) {
                 goto err;
             }
-            break;
             struct page *dst_p = spt_find_page(dst, src_p->va);
             if (dst_p == NULL)
                 goto err;
             if (!vm_do_claim_page(dst_p)) 
                 goto err;
             memcpy(dst_p->frame->kva, src_p->frame->kva, PGSIZE);
+            break;
         }
         case VM_UNINIT: ;
             struct lazy_aux *lazy_aux = calloc(1, sizeof(struct lazy_aux));

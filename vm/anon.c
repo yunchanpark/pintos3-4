@@ -21,14 +21,13 @@ static const struct page_operations anon_ops = {
 };
 
 /* Initialize the data for anonymous pages */
+/* Setup the swap disk and swap table(bitmap) */
 void
 vm_anon_init (void) {
-	/* TODO: Set up the swap_disk. */
-	swap_disk = disk_get(1, 1); // slot cnt = 1024 (4MB)
+	swap_disk = disk_get(1, 1); 
     swap_disk_size = disk_size(swap_disk);
-    // printf("__debug : size : %d\n", swap_disk_size);
-    swap_table.swap_bit = bitmap_create(swap_disk_size / 8);
-    lock_init(&swap_table.swap_lock);
+    swap_table.swap_bit = bitmap_create(swap_disk_size / 8); // page(4kb) = sector(512byte * 8) 
+    lock_init(&swap_table.swap_lock); 
 }
 
 /* Initialize the file mapping */
@@ -45,7 +44,6 @@ anon_initializer (struct page *page, enum vm_type type, void *kva) {
 /* Swap in the page by read contents from the swap disk. */
 static bool
 anon_swap_in (struct page *page, void *kva) {
-    // printf("in: %p\n", page);
 	struct anon_page *anon_page = &page->anon;
     
     disk_sector_t idx = anon_page->swap_slot;
