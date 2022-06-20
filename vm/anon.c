@@ -4,6 +4,8 @@
 #include "devices/disk.h"
 #include <stdio.h>
 
+#define DISK_SECTORS_PER_ANONPAGE 8
+
 /* DO NOT MODIFY BELOW LINE */
 static struct disk *swap_disk;
 disk_sector_t swap_disk_size;
@@ -24,10 +26,9 @@ static const struct page_operations anon_ops = {
 void
 vm_anon_init (void) {
 	/* TODO: Set up the swap_disk. */
-	swap_disk = disk_get(1, 1); // slot cnt = 1024 (4MB)
+	swap_disk = disk_get(1, 1);
     swap_disk_size = disk_size(swap_disk);
-    // printf("__debug : size : %d\n", swap_disk_size);
-    swap_table.swap_bit = bitmap_create(swap_disk_size / 8);
+    swap_table.swap_bit = bitmap_create(swap_disk_size / DISK_SECTORS_PER_ANONPAGE);
     lock_init(&swap_table.swap_lock);
 }
 
@@ -45,12 +46,11 @@ anon_initializer (struct page *page, enum vm_type type, void *kva) {
 /* Swap in the page by read contents from the swap disk. */
 static bool
 anon_swap_in (struct page *page, void *kva) {
-    // printf("in: %p\n", page);
 	struct anon_page *anon_page = &page->anon;
-    
+
     disk_sector_t idx = anon_page->swap_slot;
-    for (int i = 0; i < 8; i++) {
-        disk_read(swap_disk, (idx * 8) + i, kva + (DISK_SECTOR_SIZE * i));
+    for (int i = 0; i < DISK_SECTORS_PER_ANONPAGE; i++) {
+        disk_read(swap_disk, (idx * DISK_SECTORS_PER_ANONPAGE) + i, kva + (DISK_SECTOR_SIZE * i));
     }
 
     lock_acquire(&swap_table.swap_lock);
@@ -63,7 +63,6 @@ anon_swap_in (struct page *page, void *kva) {
 /* Swap out the page by writing contents to the swap disk. */
 static bool
 anon_swap_out (struct page *page) {
-    // printf("come on!");
 	struct anon_page *anon_page = &page->anon;
 
     lock_acquire(&swap_table.swap_lock);
@@ -73,10 +72,9 @@ anon_swap_out (struct page *page) {
     
     page->anon.swap_slot = idx;
 
-    for (int i = 0; i < 8; i++) {
-        disk_write(swap_disk, (idx * 8) + i, page->frame->kva + (DISK_SECTOR_SIZE * i));
+    for (int i = 0; i < DISK_SECTORS_PER_ANONPAGE; i++) {
+        disk_write(swap_disk, (idx * DISK_SECTORS_PER_ANONPAGE) + i, page->frame->kva + (DISK_SECTOR_SIZE * i));
     }
-
 
     pml4_clear_page(thread_current()->pml4, page->va);
     lock_acquire(&frame_lock);

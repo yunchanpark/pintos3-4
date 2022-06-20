@@ -79,7 +79,7 @@ vm_alloc_page_with_initializer (enum vm_type type, void *upage, bool writable,
 	ASSERT (VM_TYPE(type) != VM_UNINIT)
 
 	struct supplemental_page_table *spt = &thread_current ()->spt;
-    bool (*initializer) (struct page *, enum vm_type, void *kva); /*** debugging ddalgui ***/
+    bool (*initializer) (struct page *, enum vm_type, void *);
 	/* Check wheter the upage is already occupied or not. */
 	if (spt_find_page (spt, upage) == NULL) {
         struct page *page = calloc(1, sizeof(struct page));
@@ -96,15 +96,9 @@ vm_alloc_page_with_initializer (enum vm_type type, void *upage, bool writable,
                 goto err;                
         }
         upage = pg_round_down(upage);
-        uninit_new(page, upage, init, type, aux, initializer); /*** debugging ddalgui : type? marker? ***/
-        // printf("type: %d\n", type);
-        page->writable = writable; /*** debugging ddalgui ***/
-        return spt_insert_page(spt, page); /* 변경 */
-        
-        // if (!condition)
-        //     goto err;
-            
-        // return true;
+        uninit_new(page, upage, init, type, aux, initializer);
+        page->writable = writable;
+        return spt_insert_page(spt, page);
 	}
 err:
 	return false;
@@ -114,7 +108,7 @@ err:
 /*** team : 7 ***/
 struct page *
 spt_find_page (struct supplemental_page_table *spt UNUSED, void *va UNUSED) {
-    struct page page; // fake page
+    struct page page;
     page.va = pg_round_down(va);
 
     struct hash_elem *search = hash_find(spt->spt_hash, &page.spt_elem);
@@ -146,16 +140,10 @@ spt_remove_page (struct supplemental_page_table *spt, struct page *page) {
 /* Get the struct frame, that will be evicted. */
 static struct frame *
 vm_get_victim (void) {
-	// struct frame *victim = list_entry(list_pop_front(&frame_list), struct frame, f_elem);
-    // return victim ? victim : NULL;
-
-
 	struct frame *victim;
     struct thread *curr = thread_current();
-    /* 1안 */
     struct list_elem *start = keep; // 두번째 for문의 종료 기준점을 주기위해 설정.  keep~ 리스트 끝 + 리스트 끝 ~ keep(==start)
     /* keep 을 가지고 돌려야, 가장 마지막으로 돌린 친구가 계속 keep에 저장됨 */
-
     for(keep = list_next(keep); keep != list_end(&frame_list); keep = list_next(keep)){
         victim = list_entry(keep, struct frame, f_elem);
         /* 최근 사용된 적이 없다면 축출*/
@@ -180,31 +168,6 @@ vm_get_victim (void) {
             pml4_set_accessed(curr->pml4, victim->page->va, 0);
     }
     return NULL;
-
-
-    // /* 2안 */
-    // struct list_elem *e;
-    // for(e=list_begin(&frame_list); e!=list_end(&frame_list); e=list_next(e)){
-    //     victim = list_entry(keep, struct frame, f_elem);
-    //     /* 최근 사용된 적이 없다면 축출*/
-    //     if (!pml4_is_accessed(curr->pml4, victim->page->va))
-    //         return victim;
-    //     /* 아니라면 accessed bit 를 0으로 설정 후 다음친구 탐색 */
-    //     else
-    //         pml4_set_accessed(curr->pml4, victim->page->va, 0);
-    // }
-    // // return NULL;
-    
-    // struct list_elem *ref;
-	// struct frame *victim;
-    // for (ref = list_begin(&frame_list); ref != list_tail(&frame_list); ref = list_next(ref)) {
-    //     victim = list_entry(ref, struct frame, f_elem);
-    //     // if (!pml4_is_accessed(&thread_current()->pml4, victim->page->va))
-    //     //     return victim;
-    //     if (VM_MARKER(victim->page->operations->type) == VM_MARKER_0)
-    //         return victim;
-    // }
-	// return victim;
 }
 
 /* Evict one page and return the corresponding frame.
@@ -260,23 +223,18 @@ vm_handle_wp (struct page *page UNUSED) {
 bool
 vm_try_handle_fault (struct intr_frame *f UNUSED, void *addr UNUSED,
 		bool user UNUSED, bool write UNUSED, bool not_present UNUSED) {
-    // printf("fault: %p\n", addr);
     if(!not_present) exit(-1);
 	struct page *page = NULL;
     struct thread *curr = thread_current();
 	struct supplemental_page_table *spt UNUSED = &curr->spt;
     void *s_rsp = (void *)(user ? f->rsp : curr->vm_rsp);
-    // printf("__debug : page fault handler\n");
 
     /* stack growth page fault check */
     if (s_rsp - addr == 0x8 ||((void *)USER_STACK > addr) &&  (addr > s_rsp)) {
         vm_stack_growth(addr);
     }
     /* case : lazy load page fault */
-    page = spt_find_page(spt, addr); /* 변경 */
-    // printf("page: %p\n", page);
-    // printf("=====================\n");
-    // printf("__debug : type : %d\n", VM_TYPE(page->operations->type));
+    page = spt_find_page(spt, addr);
     return page == NULL ? false :vm_do_claim_page (page);
 }
 
@@ -313,7 +271,7 @@ vm_do_claim_page (struct page *page) {
 	frame->page = page;
 	page->frame = frame;
 	/* TODO: Insert page table entry to map page's VA to frame's PA. */
-    /* from install_page */
+    /* from install_page of process.c (which is a helper function for load */
     struct thread *t = thread_current ();
 
 	if (pml4_get_page (t->pml4, page->va) == NULL // pml4에 upage unmapping 상태이면
@@ -347,8 +305,7 @@ supplemental_page_table_copy (struct supplemental_page_table *dst UNUSED,
     hash_first (&i, src->spt_hash);
     while (hash_next (&i)) {      
         struct page *src_p = hash_entry (hash_cur (&i), struct page, spt_elem);
-        // printf("copy-type: %d\n", src_p->uninit.type);
-        // printf("copy-init: %p\n", src_p->uninit.init);
+
         switch (src_p->operations->type) {
         case VM_ANON: {
             if(VM_MARKER(src_p->uninit.type)) {
@@ -377,9 +334,8 @@ supplemental_page_table_copy (struct supplemental_page_table *dst UNUSED,
             lazy_file->page_zero_bytes = file_page->page_zero_bytes;
             lazy_file->page_cnt = calloc(1, sizeof(size_t));
             lazy_file->page_cnt = file_page->page_cnt;
-            if(!vm_alloc_page_with_initializer(page_get_type(src_p), src_p->va, src_p->writable, lazy_load_file, lazy_file)) {
+            if(!vm_alloc_page_with_initializer(page_get_type(src_p), src_p->va, src_p->writable, lazy_load_file, lazy_file))
                 goto err;
-            }
             break;
             struct page *dst_p = spt_find_page(dst, src_p->va);
             if (dst_p == NULL)

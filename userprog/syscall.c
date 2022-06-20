@@ -83,24 +83,19 @@ syscall_init (void) {
 
 /* helper functions letsgo ! */
 void check_address(const uint64_t* addr){
-	struct thread *t = thread_current(); // 변경사항
+	struct thread *t = thread_current();
 	/* 포인터가 가리키는 주소가 유저영역의 주소인지 확인 */
 	/* what if the user provides an invalid pointer, a pointer to kernel memory, 
 	 * or a block partially in one of those regions */
 	/* 잘못된 접근인 경우, 프로세스 종료 */
 	// if (!is_user_vaddr(addr) || addr == NULL || pml4_get_page(t->pml4, addr) == NULL)
-    /* team 7 */
-	// if (!is_user_vaddr(addr) || addr == NULL || !spt_find_page(&t->spt, addr))
+	// 	exit(-1);
 	if (!is_user_vaddr(addr) || addr == NULL)
 		exit(-1);
 } 
 
 void check_rw(void *addr) {
-	// struct page *p1 = spt_find_page(&thread_current()->spt, addr);
-	// printf("page: %p\n", p1);
-	// *(char *)addr = "a";
 	struct page *p = spt_find_page(&thread_current()->spt, addr);
-	// printf("writable: %d\n\n\n", p->writable);
 	if (p != NULL && !p->writable)
 		exit(-1);
 }
@@ -128,7 +123,6 @@ struct file *process_get_file (int fd){
 
 /* revove the file(corresponding to fd) from the FDT of current process */
 
-
 void process_close_file(int fd){
 	if (fd < 0 || fd > FDCOUNT_LIMIT)
 		return NULL;
@@ -142,19 +136,9 @@ void
 syscall_handler (struct intr_frame *f UNUSED) {
 	// TODO: Your implementation goes here.
 	int syscall_num = f->R.rax; // rax: system call number
-	ASSERT(is_user_vaddr(f->rsp));
-	thread_current()->vm_rsp = f->rsp;
-	// printf("-----------syscall---------\n");
-	// printf("rsp %p\n", f->rsp);
-	// printf("rdi %p\n", f->R.rdi);
-	// printf("rsi %p\n", f->R.rsi);
-	// uint64_t *pte = pml4_get_page(thread_current()->pml4, f->R.rsi);
-	// if (pte != NULL)
-	// 	printf("pte: %d\n", PTE_P & *pte);
-	// *(char *)f->R.rsi == "a";
-	// *(int *)NULL = 0;
-	// printf("rdx %p\n", f->R.rdx);
-	// printf("-----------syscall---------\n");
+	ASSERT(is_user_vaddr(f->rsp)); 
+	thread_current()->vm_rsp = f->rsp; // Project 3 : Team 7 
+
 	switch(syscall_num){
 		case SYS_HALT:                   /* Halt the operating system. */
 			halt();
@@ -214,15 +198,11 @@ syscall_handler (struct intr_frame *f UNUSED) {
             munmap(f->R.rdi);
             break;
 
-		default:						 /* call thread_exit() ? */
+		default:						 
 			exit(-1);
 			break;
 	}
-	// printf ("system call!\n");
-	// thread_exit ();
 }
-
-//변경사항 
 
 /* halt the operating system */ 
 void halt(void){
@@ -382,7 +362,6 @@ unsigned tell (int fd){
 
 void close (int fd){
 	
-	// printf("close: %d\n", fd);
 	struct file *f = process_get_file(fd);
 
 	if(f == NULL)
@@ -436,13 +415,11 @@ int dup2(int oldfd, int newfd){
 
 /* team 7 */
 void *mmap (void *addr, size_t length, int writable, int fd, off_t offset) {
-	// printf("mmap: %p\n", addr);
     struct file *file = process_get_file(fd);
     return do_mmap(addr, length, writable, file, offset);
 }
 
 void munmap (void *addr) {
-	// printf("munmap: %p\n", addr);
     // 조건 확인 (맵핑 되어 있는 addr인지, mmap에 의해서 맵핑된 곳이 맞는지)
     do_munmap(addr); 
 }

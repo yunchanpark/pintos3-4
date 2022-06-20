@@ -19,7 +19,7 @@
 #include "threads/vaddr.h"
 #include "intrinsic.h"
 #include "userprog/process.h"
-#ifdef VM // 살려!
+#ifdef VM
 #include "vm/vm.h"
 #endif
 
@@ -54,10 +54,10 @@ process_create_initd (const char *file_name) {
 	strlcpy (fn_copy, file_name, PGSIZE);
 
 	/* Create a new thread to execute FILE_NAME. */
-	// 변경사항
+	// project 1or2 변경사항
 	char *token, *save_ptr;
 	token = strtok_r(file_name, " ", &save_ptr);
-	// 변경사항
+	// project 1or2 변경사항
 	tid = thread_create (file_name, PRI_DEFAULT, initd, fn_copy);
 	if (tid == TID_ERROR)
 		palloc_free_page (fn_copy);
@@ -84,7 +84,6 @@ tid_t
 process_fork (const char *name, struct intr_frame *if_ UNUSED) {
 	/* Clone current thread to new thread.*/
 	struct thread *curr = thread_current();
-	// memcpy(&curr->parent_if, if_, sizeof(struct intr_frame)); 
 
 	tid_t pid = thread_create (name, PRI_DEFAULT, __do_fork, curr); // 마지막에 thread_current를 줘서, 같은 rsi를 공유하게 함.
 	if (pid == TID_ERROR)
@@ -144,7 +143,6 @@ struct dict_elem{
 	uintptr_t key;
 	uintptr_t value;
 };
-// dup_count 말고 map_idx가 더 lgtm
 
 /* A thread function that copies parent's execution context.
  * Hint) parent->tf does not hold the userland context of the process.
@@ -163,15 +161,7 @@ __do_fork (void *aux) {
 
 	/* 1. Read the cpu context to local stack. */
 	memcpy (&if_, parent_if, sizeof (struct intr_frame));
-	// printf("parent_if: %p\n", parent_if);
-	// printf("p_r15: %p\n", &parent_if->R.r15);
-	// printf("p_r14: %p\n", parent_if->R.r14);
-	// printf("p_r13: %p\n", parent_if->R.r13);
-	// printf("p_r12: %p\n", parent_if->R.r12);
-	// printf("p_r11: %p\n", parent_if->R.r11);
-	// printf("p_r10: %p\n", parent_if->R.r10);
-	// printf("p_r9: %p\n", parent_if->R.r9);
-	// printf("p_r8: %p\n", parent_if->R.r8);
+
 	/* 2. Duplicate PT */
 	current->pml4 = pml4_create();
 	if (current->pml4 == NULL)
@@ -201,9 +191,6 @@ __do_fork (void *aux) {
 	const int DICTLEN = 100;
 	struct dict_elem dup_file_dict[100];
 	int dup_idx = 0;
-	
-	// current->fd_table[0] = parent->fd_table[0];
-	// current->fd_table[1] = parent->fd_table[1];
 
 	for(int i = 0; i < FDCOUNT_LIMIT; i++){
 		struct file *f = parent->fd_table[i];
@@ -243,20 +230,19 @@ __do_fork (void *aux) {
 
 	/* Finally, switch to the newly created process. */
 	if (succ){
-		// printf("===========\n");
 		do_iret (&if_);
 	}
 error:
-	current->exit_status = TID_ERROR; // 없어도될듯? 실험
+	// current->exit_status = TID_ERROR; // 아래의 exit 내에서 처리됨
 	sema_up(&current->fork_sema);
 	exit(TID_ERROR);
-	// thread_exit ();
+	// thread_exit (); // 위의 exit 내에서 호출됨
 }
 
 /* Switch the current execution context to the f_name.
  * Returns -1 on fail. */
 int
-process_exec (void *f_name) { // 실험 
+process_exec (void *f_name) {
 	char *file_name = f_name;
 	bool success;
 
@@ -284,8 +270,6 @@ process_exec (void *f_name) { // 실험
 		palloc_free_page (file_name); 
 		return -1;
 	}
-
-	/* argument stack 함수 위치가 여기여야 할까? */
 
 	// hex_dump(_if.rsp, _if.rsp, USER_STACK - _if.rsp, true); //Project 2 (argument passing 관련 변경) // KERN_BASE -> USER_STACK
 
@@ -763,7 +747,7 @@ install_page (void *upage, void *kpage, bool writable) {
 	return (pml4_get_page (t->pml4, upage) == NULL
 			&& pml4_set_page (t->pml4, upage, kpage, writable));
 }
-#else // 살려!
+#else
 /* From here, codes will be used after project 3.
  * If you want to implement the function for only project 2, implement it on the
  * upper block. */

@@ -15,7 +15,6 @@ struct thread * get_child(int pid);
 
 /*** team 7 : for lazy load ***/
 struct lazy_aux {
-    // file은 current thread의 running file로
     size_t page_read_bytes;
     size_t page_zero_bytes;
     off_t ofs; // file_seek offset

@@ -1,7 +1,7 @@
 #ifndef VM_VM_H
 #define VM_VM_H
 #include <stdbool.h>
-#include <hash.h>   /*** team 8 ***/
+#include <hash.h>   /*** team 7 ***/
 #include "threads/palloc.h"
 #include "threads/vaddr.h"
 #include <list.h>
@@ -90,7 +90,7 @@ struct page_operations {
 	bool (*swap_in) (struct page *, void *);
 	bool (*swap_out) (struct page *);
 	void (*destroy) (struct page *);
-	enum vm_type type; // VM_ANON...
+	enum vm_type type;
 };
 
 #define swap_in(page, v) (page)->operations->swap_in ((page), v)
@@ -104,7 +104,7 @@ struct page_operations {
 
 /*** team 7 ***/
 struct supplemental_page_table {
-    struct hash *spt_hash; // debugging ddalgui
+    struct hash *spt_hash;
 };
 
 struct lock frame_lock;

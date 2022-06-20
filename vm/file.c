@@ -7,8 +7,6 @@ static bool file_backed_swap_in (struct page *page, void *kva);
 static bool file_backed_swap_out (struct page *page);
 static void file_backed_destroy (struct page *page);
 
-
-
 /* DO NOT MODIFY this struct */
 static const struct page_operations file_ops = {
 	.swap_in = file_backed_swap_in,
@@ -101,8 +99,7 @@ file_backed_destroy (struct page *page) {
         pml4_set_dirty(curr->pml4, page->frame->kva, false);
     }
     
-    if (*(file_page->page_cnt) != 0)
-        *(file_page->page_cnt)--;
+    *(file_page->page_cnt)--;
     if(*(file_page->page_cnt) == 0) {
         lock_acquire(&file_lock);
         file_close(file_page->re_file);
@@ -124,16 +121,14 @@ file_backed_destroy (struct page *page) {
 /* team 7 */
 void *
 do_mmap (void *addr, size_t length, int writable, struct file *ori_file, off_t offset) {
-    // fail cases
     if (addr <= 0 || ori_file < 3 || pg_ofs(addr) || !file_length(ori_file) || is_kernel_vaddr(addr) || (long)length <= 0 || offset % PGSIZE) 
         goto err;
     
-    // reopen
     struct file *file = file_reopen(ori_file);
 
     struct thread *curr = thread_current();
     struct page *page = NULL;
-    size_t page_cnt = (int)(length / PGSIZE); /* debugging ddalgui*/
+    size_t page_cnt = (int)(length / PGSIZE);
     if(length % PGSIZE) 
         page_cnt++;
     
@@ -175,7 +170,6 @@ do_munmap (void *addr) {
     if(!page)
         goto err;
 
-    // fail case
     if (!page->frame || page->operations->type != VM_FILE)
         goto err;
 
@@ -193,12 +187,7 @@ err:
 bool
 lazy_load_file(struct page *page, struct lazy_file *aux) {
     struct file *file = aux->re_file;
-    // printf("kva: %p\n", page->frame->kva);
-    // printf("ofs: %d\n", aux->ofs);
-    // printf("page_read_bytes: %d\n", aux->page_read_bytes);
-    // printf("file: %p\n", file);
     file_read_at(file, page->frame->kva, aux->page_read_bytes, aux->ofs);
     free(aux);
-    // printf("==============================\n");
     return true;
 }
