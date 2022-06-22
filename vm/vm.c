@@ -154,37 +154,34 @@ static struct frame *
 vm_get_victim (void) {
 	struct frame *victim;
     struct thread *curr = thread_current();
-    struct list_elem *clock_point = keep; // 탐색 분기점 설정
+    struct list_elem *clock_point = keep; 
 
     // keep이 list의 head인 것에 대비 (head에서 참조할 상위 struct는 frame이 아님)
-    // 탐색 1 : keep -> end
-    if (keep == list_head(&frame_list)) {
+    if (keep == list_head(&frame_list))
         keep = list_next(keep);
-    }
-    for(keep; keep != list_end(&frame_list); keep = list_next(keep)){
-    // for (keep == list_head(&frame_list) ? list_next(keep) : keep; keep != list_end(&frame_list); keep = list_next(keep)) {
+
+    // 탐색 1 : keep -> end
+    for (keep = list_next(keep); keep != list_end(&frame_list); keep = list_next(keep)) {
         victim = list_entry(keep, struct frame, f_elem);
-        
+   
         if (!pml4_is_accessed(curr->pml4, victim->page->va)) {
             keep = list_next(keep);
             return victim;
-        }
-        else {
+        } else
             pml4_set_accessed(curr->pml4, victim->page->va, 0);
-        }
     }
-
+    
     // 탐색 2 : begin -> prev(keep)
     for (keep = list_begin(&frame_list); keep != clock_point; keep = list_next(keep)) {
         victim = list_entry(keep, struct frame, f_elem);
-
+        /* 최근 사용된 적이 없다면 축출*/
         if (!pml4_is_accessed(curr->pml4, victim->page->va)) {
             keep = list_next(keep);
             return victim;
-        }
-        else {
-            pml4_set_accessed(curr->pml4, victim->page->va, 0); }
+        } else
+            pml4_set_accessed(curr->pml4, victim->page->va, 0);
     }
+
     return NULL;
 }
 
@@ -215,7 +212,6 @@ vm_get_frame (void) {
 
         // 재할당
         temp = palloc_get_page(PAL_ZERO | PAL_USER); 
-        // printf("__debug : get?\n");
         // ASSERT (temp != NULL)
     }
 
@@ -294,9 +290,9 @@ vm_do_claim_page (struct page *page) {
     if (!frame) 
         return false;
 
-
-	/* Set links */
     struct thread *t = thread_current ();
+
+    /* frame - page link */
 	frame->page = page;
 	page->frame = frame;
 
@@ -326,10 +322,7 @@ supplemental_page_table_kill (struct supplemental_page_table *spt UNUSED) {
 
 /* copy the source supplemental page table to destination */
 /* 1. set hash iterator
- * 2. spt를 순회하면서 각 페이지 타입에 맞는 copy 과정 수행
- * general : allocate a page through vm_alloc
- * type anon : stack, general 확인해서 initializer 세팅, memcpy
- * type file : aux setting, memcpy             */
+ * 2. spt를 순회하면서 각 페이지 타입에 맞는 copy 과정 수행 */
 bool
 supplemental_page_table_copy (struct supplemental_page_table *dst UNUSED,
 		struct supplemental_page_table *src UNUSED) {
