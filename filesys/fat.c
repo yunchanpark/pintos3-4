@@ -5,6 +5,7 @@
 #include "threads/synch.h"
 #include <stdio.h>
 #include <string.h>
+#include <bitmap.h>
 
 /* Should be less than DISK_SECTOR_SIZE */
 struct fat_boot {
@@ -27,6 +28,7 @@ struct fat_fs {
 };
 
 static struct fat_fs *fat_fs;
+static struct bitmap *fat_bs;
 
 void fat_boot_create (void);
 void fat_fs_init (void);
@@ -49,6 +51,9 @@ fat_init (void) {
 	if (fat_fs->bs.magic != FAT_MAGIC)
 		fat_boot_create ();
 	fat_fs_init ();
+
+	/* Project 4 : FAT */
+	fat_bs = bitmap_create(fat_fs->fat_length);
 }
 
 void
@@ -153,6 +158,9 @@ fat_boot_create (void) {
 void
 fat_fs_init (void) {
 	/* TODO: Your code goes here. */
+	/* Project 4 : FAT */
+	fat_fs->fat_length = fat_fs->bs.total_sectors;
+	fat_fs->data_start = fat_fs->bs.fat_start + fat_fs->bs.fat_sectors;
 }
 
 /*----------------------------------------------------------------------------*/
@@ -165,6 +173,17 @@ fat_fs_init (void) {
 cluster_t
 fat_create_chain (cluster_t clst) {
 	/* TODO: Your code goes here. */
+	/* Project 4 : FAT */
+	cluster_t clst_to_add = (cluster_t)bitmap_scan_and_flip(fat_bs, 0, 1, false) + 1; // 인덱스가 cluster는 1부터 시작, bitmap과 fat는 0부터 시작
+	if (clst_to_add == BITMAP_ERROR)
+		return 0;
+	fat_put(clst_to_add, EOChain);
+	if (clst == 0){
+		return clst_to_add;
+	}else{
+		fat_put(clst, clst_to_add);
+		return clst_to_add;
+	}
 }
 
 /* Remove the chain of clusters starting from CLST.
@@ -172,22 +191,35 @@ fat_create_chain (cluster_t clst) {
 void
 fat_remove_chain (cluster_t clst, cluster_t pclst) {
 	/* TODO: Your code goes here. */
+	/* Project 4 : FAT */
+	while (clst != EOChain){
+		bitmap_set(fat_bs, clst-1, false);
+		clst = fat_get(clst);
+	}
+	if (pclst)
+		fat_put(pclst, EOChain);
 }
 
 /* Update a value in the FAT table. */
 void
 fat_put (cluster_t clst, cluster_t val) {
 	/* TODO: Your code goes here. */
+	/* Project 4 : FAT */
+	fat_fs->fat[clst-1] = val; // val도 -1을 해버리면, fat_get을 할 때 하나씩 앞으로 밀리게됨
 }
 
 /* Fetch a value in the FAT table. */
 cluster_t
 fat_get (cluster_t clst) {
 	/* TODO: Your code goes here. */
+	/* Project 4 : FAT */
+	return fat_fs->fat[clst-1];
 }
 
 /* Covert a cluster # to a sector number. */
 disk_sector_t
 cluster_to_sector (cluster_t clst) {
 	/* TODO: Your code goes here. */
+	/* Project 4 : FAT */
+	return fat_fs->data_start + clst-1 ;
 }
