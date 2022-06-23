@@ -38,17 +38,17 @@ fat_init (void) {
 		PANIC ("FAT init failed");
 
 	// Read boot sector from the disk
-	unsigned int *bounce = malloc (DISK_SECTOR_SIZE);
+	unsigned int *bounce = malloc (DISK_SECTOR_SIZE); // File Allocate Table
 	if (bounce == NULL)
 		PANIC ("FAT init failed");
-	disk_read (filesys_disk, FAT_BOOT_SECTOR, bounce);
-	memcpy (&fat_fs->bs, bounce, sizeof (fat_fs->bs));
-	free (bounce);
+	disk_read (filesys_disk, FAT_BOOT_SECTOR, bounce); // * filesys_disk의 boot sector를 bounce로
+	memcpy (&fat_fs->bs, bounce, sizeof (fat_fs->bs)); // * bounce를 fat_fs->bs로 copy : bs = boot sector 
+	free (bounce); // * free buffer
 
 	// Extract FAT info
-	if (fat_fs->bs.magic != FAT_MAGIC)
+	if (fat_fs->bs.magic != FAT_MAGIC) // * FAT_MAGIC : idenfity file disk, if not~
 		fat_boot_create ();
-	fat_fs_init ();
+	fat_fs_init (); // * initializ fat file system
 }
 
 void
@@ -137,7 +137,7 @@ fat_create (void) {
 
 void
 fat_boot_create (void) {
-	unsigned int fat_sectors =
+	unsigned int fat_sectors = // * find.. set..? fat sector
 	    (disk_size (filesys_disk) - 1)
 	    / (DISK_SECTOR_SIZE / sizeof (cluster_t) * SECTORS_PER_CLUSTER + 1) + 1;
 	fat_fs->bs = (struct fat_boot){
@@ -152,7 +152,9 @@ fat_boot_create (void) {
 
 void
 fat_fs_init (void) {
-	/* TODO: Your code goes here. */
+	// lock_init(&fat_fs->write_lock); // initialize FAT lock 
+    // fat_fs->fat_length = fat_fs->bs.total_sectors;// length : disk 내에 존재하는 cluster의 숫자
+    // fat_fs->data_start = fat_fs->bs.fat_sectors;// data start : data 저장이 가능한 sector 시작점
 }
 
 /*----------------------------------------------------------------------------*/
@@ -164,30 +166,51 @@ fat_fs_init (void) {
  * Returns 0 if fails to allocate a new cluster. */
 cluster_t
 fat_create_chain (cluster_t clst) {
-	/* TODO: Your code goes here. */
+	// if (fat_fs->fat[clst] == 0) { // * 파일의 시작인 경우
+    //     fat_fs->fat[clst] = -1;
+    //     return;
+    // } 
+    
+    // // * 0인 idx clst 찾기
+    // for (int i = fat_fs->data_start; i < fat_fs->fat_length; i++) {
+    //     if (fat_fs->fat[i] == 0) {
+    //         fat_fs->fat[clst] = i;
+    //         return (cluster_t)i;
+    //     }
+    // }   
+    // return NULL; // * 실패 처리 필요하겠지?
 }
 
 /* Remove the chain of clusters starting from CLST.
  * If PCLST is 0, assume CLST as the start of the chain. */
 void
 fat_remove_chain (cluster_t clst, cluster_t pclst) {
-	/* TODO: Your code goes here. */
+	// fat_fs->fat[pclst] = -1;
+    // uint32_t *ref = fat_fs->fat[clst];
+    // while (*ref != -1) {
+    //     *ref = 0;
+    //     ref = fat_fs->fat[*ref];
+    // }
+    // *ref = 0;
 }
 
 /* Update a value in the FAT table. */
 void
 fat_put (cluster_t clst, cluster_t val) {
-	/* TODO: Your code goes here. */
+    // if (fat_fs->fat[clst] == -1) {
+    //     fat_fs->fat[clst] = val;
+    //     fat_fs->fat[val] = -1;
+    // }
 }
 
 /* Fetch a value in the FAT table. */
 cluster_t
 fat_get (cluster_t clst) {
-	/* TODO: Your code goes here. */
+	// return fat_fs->fat[clst];
 }
 
 /* Covert a cluster # to a sector number. */
 disk_sector_t
 cluster_to_sector (cluster_t clst) {
-	/* TODO: Your code goes here. */
+	// return clst - fat_fs->data_start;
 }
